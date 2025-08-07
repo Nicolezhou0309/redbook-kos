@@ -1,0 +1,40 @@
+{
+  "name": "crm-platform",
+  "private": true,
+  "version": "1.0.0",
+  "description": "CRM管理平台 - 基于Vite + React + Ant Design",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint . --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ant-design/charts": "^2.0.2",
+    "@ant-design/icons": "^5.2.6",
+    "@supabase/supabase-js": "^2.50.2",
+    "antd": "^5.26.2",
+    "dayjs": "^1.11.13",
+    "exceljs": "^4.4.0",
+    "lodash": "^4.17.21",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.6.3",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.14.202",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@types/xlsx": "^0.0.35",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "typescript": "^5.2.2",
+    "vite": "^5.2.0"
+  }
+}
