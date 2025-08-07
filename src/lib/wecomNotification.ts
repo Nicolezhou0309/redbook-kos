@@ -43,7 +43,7 @@ export class WeComNotificationService {
     this.config = config;
     // 根据环境选择API地址
     this.baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://your-vercel-domain.vercel.app/api/wecom'  // 部署后需要更新为实际域名
+      ? 'https://nicole.xin/api/wecom'  // 更新为实际域名
       : '/api/wecom';
   }
 

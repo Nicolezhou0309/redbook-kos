@@ -3,9 +3,10 @@ import axios from 'axios';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 设置CORS头
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', 'https://nicole.xin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -17,16 +18,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { access_token, ...message } = req.body;
+    const { access_token, agentid, ...messageData } = req.body;
 
-    if (!access_token) {
-      return res.status(400).json({ error: 'Missing access_token' });
+    if (!access_token || !agentid) {
+      return res.status(400).json({ error: 'Missing access_token or agentid' });
     }
 
-    const response = await axios.post(
-      `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${access_token}`,
-      message
-    );
+    const response = await axios.post('https://qyapi.weixin.qq.com/cgi-bin/message/send', {
+      access_token,
+      agentid,
+      ...messageData
+    });
 
     res.json(response.data);
   } catch (error) {
