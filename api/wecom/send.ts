@@ -1,19 +1,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+const handler = async (req: VercelRequest, res: VercelResponse) => {
+  console.log('Send API called with method:', req.method);
+  console.log('Send API called with URL:', req.url);
+  console.log('Send API called with body:', req.body);
+
   // 设置CORS头
-  res.setHeader('Access-Control-Allow-Origin', 'https://nicole.xin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') {
+    console.log('Handling OPTIONS request');
     res.status(200).end();
     return;
   }
 
   if (req.method !== 'POST') {
+    console.log('Method not allowed:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -21,8 +27,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { access_token, ...messageData } = req.body;
 
     if (!access_token) {
+      console.log('Missing access_token');
       return res.status(400).json({ error: 'Missing access_token' });
     }
+
+    console.log('Sending message to WeChat API:', messageData);
 
     const response = await axios.post(
       `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${access_token}`,
@@ -34,6 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     );
 
+    console.log('WeChat API response:', response.data);
     res.json(response.data);
   } catch (error) {
     console.error('发送企业微信消息失败:', error);
@@ -41,4 +51,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: error instanceof Error ? error.message : '未知错误' 
     });
   }
-}
+};
+
+export default handler;

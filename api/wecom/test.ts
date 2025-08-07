@@ -1,8 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('Test API called');
+
   // 设置CORS头
-  res.setHeader('Access-Control-Allow-Origin', 'https://nicole.xin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -12,8 +14,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  res.json({ 
-    message: 'API测试成功',
+  // 返回简单的测试响应
+  res.json({
+    success: true,
+    message: 'API is working',
     timestamp: new Date().toISOString(),
     method: req.method,
     url: req.url

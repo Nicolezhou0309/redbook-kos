@@ -1,12 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import axios from 'axios';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+const handler = async (req: VercelRequest, res: VercelResponse) => {
   console.log('Token API called with method:', req.method);
   console.log('Token API called with URL:', req.url);
   console.log('Token API called with headers:', req.headers);
 
   // 设置CORS头
-  res.setHeader('Access-Control-Allow-Origin', 'https://nicole.xin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -31,16 +32,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing corpid or corpsecret' });
     }
 
-    // 返回一个测试响应
-    const response = {
-      errcode: 0,
-      access_token: 'test_token_' + Date.now(),
-      expires_in: 7200,
-      message: 'API is working - debug version'
-    };
-    
-    console.log('Sending response:', response);
-    res.json(response);
+    // 调用企业微信API获取真实token
+    const response = await axios.get('https://qyapi.weixin.qq.com/cgi-bin/gettoken', {
+      params: { corpid, corpsecret }
+    });
+
+    console.log('WeChat API response:', response.data);
+    res.json(response.data);
 
   } catch (error) {
     console.error('API错误:', error);
@@ -49,4 +47,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
-}
+};
+
+export default handler;

@@ -168,9 +168,9 @@ export const createWeComNotification = (config: WeComConfig) => {
   return new WeComNotificationService(config);
 };
 
-// 默认配置（使用提供的配置信息）
+// 默认配置（使用新的配置信息）
 export const wecomNotification = createWeComNotification({
-  corpid: 'ww30ead8f4b3e9e84d',
-  corpsecret: 'ocrsCpRalvhbUSw9HVYrkFaoPZMIGh10VGDGl_hGbk',
-  agentid: '1000110'
+  corpid: 'ww68a125fce698cb59',
+  corpsecret: 'sXQeFCLDQJkwrX5lMWDzBTEIiHK1J7-a2e7chPyqYxY',
+  agentid: '1000002'
 });

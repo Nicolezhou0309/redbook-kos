@@ -14,7 +14,8 @@
     "noEmit": false,
     "outDir": "./dist",
     "declaration": false,
-    "allowJs": true
+    "allowJs": true,
+    "moduleDetection": "force"
   },
   "include": ["api/**/*"],
   "exclude": ["node_modules", "dist"]
