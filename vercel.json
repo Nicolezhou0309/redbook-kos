@@ -1,16 +1,27 @@
 {
-  "buildCommand": "npm run build:api && npm run build",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "dist/wecom/token.js": {
+    "api/wecom/token-simple.ts": {
       "runtime": "@vercel/node"
     },
-    "dist/wecom/send.js": {
+    "api/wecom/send-simple.ts": {
+      "runtime": "@vercel/node"
+    },
+    "api/wecom/test.ts": {
       "runtime": "@vercel/node"
     }
   },
   "routes": [
+    {
+      "src": "/api/wecom/token",
+      "dest": "/api/wecom/token-simple"
+    },
+    {
+      "src": "/api/wecom/send",
+      "dest": "/api/wecom/send-simple"
+    },
     {
       "src": "/api/wecom/(.*)",
       "dest": "/api/wecom/$1"

@@ -87,15 +87,15 @@ const MessageTest: React.FC = () => {
         <Row gutter={[16, 16]}>
           <Col span={8}>
             <Title level={5}>企业ID (CorpId)</Title>
-            <Paragraph copyable>ww30ead8f4b3e9e84d</Paragraph>
+            <Paragraph copyable>ww68a125fce698cb59</Paragraph>
           </Col>
           <Col span={8}>
             <Title level={5}>应用密钥 (CorpSecret)</Title>
-            <Paragraph copyable>ocrsCpRalvhbUSw9HVYrkFaoPZMIGh10VGDGl_hGbk</Paragraph>
+            <Paragraph copyable>sXQeFCLDQJkwrX5lMWDzBTEIiHK1J7-a2e7chPyqYxY</Paragraph>
           </Col>
           <Col span={8}>
             <Title level={5}>应用ID (AgentId)</Title>
-            <Paragraph copyable>1000110</Paragraph>
+            <Paragraph copyable>1000002</Paragraph>
           </Col>
         </Row>
       </Card>

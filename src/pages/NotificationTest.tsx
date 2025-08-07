@@ -344,7 +344,7 @@ const NotificationTest: React.FC = () => {
         <Row gutter={[16, 16]}>
           <Col span={8}>
             <Title level={5}>企业ID (CorpId)</Title>
-            <Paragraph copyable>ww30ead8f4b3e9e84d</Paragraph>
+            <Paragraph copyable>ww68a125fce698cb59</Paragraph>
           </Col>
           <Col span={8}>
             <Title level={5}>应用密钥 (CorpSecret)</Title>
