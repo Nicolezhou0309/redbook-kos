@@ -17,7 +17,7 @@ function App() {
   return (
     <AuthProvider>
       <AntApp>
-        <Router>
+        <Router basename="/redbook-kos">
           <Routes>
             {/* 公开路由 */}
             <Route path="/login" element={<Login />} />
