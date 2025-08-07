@@ -1,29 +1,5 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/redbook-kos/(.*)",
-      "destination": "/index.html"
-    }
-  ],
-  "redirects": [
-    {
-      "source": "/redbook-kos",
-      "destination": "/redbook-kos/",
-      "permanent": true
-    }
-  ],
-  "headers": [
-    {
-      "source": "/redbook-kos/assets/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
-  ]
+  "framework": "vite"
 } 
