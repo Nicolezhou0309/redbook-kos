@@ -4,19 +4,19 @@
   "framework": "vite",
   "functions": {
     "api/wecom/token.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "@vercel/node@5.3.11"
     },
     "api/wecom/send.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "@vercel/node@5.3.11"
     },
     "api/wecom/token-fixed.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "@vercel/node@5.3.11"
     },
     "api/wecom/send-fixed.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "@vercel/node@5.3.11"
     },
     "api/wecom/test.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "@vercel/node@5.3.11"
     }
   },
   "routes": [
