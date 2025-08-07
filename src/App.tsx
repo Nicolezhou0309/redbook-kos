@@ -12,6 +12,8 @@ import EmployeeNotes from './pages/EmployeeNotes';
 import EmployeeSimpleJoin from './pages/EmployeeSimpleJoin';
 import EmployeeManage from './pages/EmployeeManage';
 import DisciplinaryRecord from './pages/DisciplinaryRecord';
+import MessageTest from './pages/MessageTest';
+import NotificationTest from './pages/NotificationTest';
 
 function App() {
   return (
@@ -36,6 +38,8 @@ function App() {
               <Route path="employee-simple-join" element={<EmployeeSimpleJoin />} />
               <Route path="employee-manage" element={<EmployeeManage />} />
               <Route path="disciplinary-record" element={<DisciplinaryRecord />} />
+              <Route path="message-test" element={<MessageTest />} />
+              <Route path="notification-test" element={<NotificationTest />} />
             </Route>
             
             {/* 默认重定向到登录页面 */}

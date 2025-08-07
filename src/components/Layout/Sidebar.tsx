@@ -7,6 +7,7 @@ import {
   MergeCellsOutlined,
   TeamOutlined,
   ExclamationCircleOutlined,
+  MessageOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -90,6 +91,23 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       key: '/employee-manage',
       icon: <TeamOutlined />,
       label: '员工管理',
+    },
+    {
+      key: 'notification',
+      icon: <MessageOutlined />,
+      label: '通知功能',
+      children: [
+        {
+          key: '/message-test',
+          icon: <MessageOutlined />,
+          label: '基础消息测试',
+        },
+        {
+          key: '/notification-test',
+          icon: <MessageOutlined />,
+          label: '高级通知测试',
+        },
+      ],
     },
   ];
 
