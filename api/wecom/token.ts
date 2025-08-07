@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import axios from 'axios';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 设置CORS头
@@ -24,29 +23,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing corpid or corpsecret' });
     }
 
-    console.log('请求企业微信API:', { corpid, corpsecret: '***' });
-
-    const response = await axios.get('https://qyapi.weixin.qq.com/cgi-bin/gettoken', {
-      params: { corpid, corpsecret },
-      timeout: 10000
+    // 先返回一个测试响应，确认API能正常工作
+    res.json({
+      errcode: 0,
+      access_token: 'test_token',
+      expires_in: 7200,
+      message: 'API is working'
     });
 
-    console.log('企业微信API响应:', response.data);
-    res.json(response.data);
   } catch (error) {
-    console.error('获取企业微信访问令牌失败:', error);
-    
-    if (axios.isAxiosError(error)) {
-      res.status(500).json({ 
-        error: '企业微信API请求失败',
-        details: error.message,
-        status: error.response?.status
-      });
-    } else {
-      res.status(500).json({ 
-        error: '未知错误',
-        details: error instanceof Error ? error.message : '未知错误'
-      });
-    }
+    console.error('API错误:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 }
