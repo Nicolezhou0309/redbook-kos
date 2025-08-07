@@ -42,7 +42,7 @@ export class WeComNotificationService {
   constructor(config: WeComConfig) {
     this.config = config;
     this.baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://nicole.xin/api/wecom'  // 生产环境
+      ? 'https://qyapi.weixin.qq.com/cgi-bin'  // 生产环境直接调用企业微信API
       : '/api/wecom';  // 开发环境使用代理
   }
 
@@ -56,12 +56,25 @@ export class WeComNotificationService {
     }
 
     try {
-      const response = await axios.get(`${this.baseUrl}/token`, {
-        params: {
-          corpid: this.config.corpid,
-          corpsecret: this.config.corpsecret
-        }
-      });
+      let response;
+      
+      if (process.env.NODE_ENV === 'production') {
+        // 生产环境直接调用企业微信API
+        response = await axios.get(`${this.baseUrl}/gettoken`, {
+          params: {
+            corpid: this.config.corpid,
+            corpsecret: this.config.corpsecret
+          }
+        });
+      } else {
+        // 开发环境使用代理
+        response = await axios.get(`${this.baseUrl}/token`, {
+          params: {
+            corpid: this.config.corpid,
+            corpsecret: this.config.corpsecret
+          }
+        });
+      }
 
       if (response.data.errcode === 0) {
         this.accessToken = response.data.access_token;
@@ -81,11 +94,22 @@ export class WeComNotificationService {
     try {
       const accessToken = await this.getAccessToken();
       
-      const response = await axios.post(`${this.baseUrl}/send`, {
-        access_token: accessToken,
-        agentid: this.config.agentid,
-        ...message
-      });
+      let response;
+      
+      if (process.env.NODE_ENV === 'production') {
+        // 生产环境直接调用企业微信API
+        response = await axios.post(`${this.baseUrl}/message/send?access_token=${accessToken}`, {
+          agentid: this.config.agentid,
+          ...message
+        });
+      } else {
+        // 开发环境使用代理
+        response = await axios.post(`${this.baseUrl}/send`, {
+          access_token: accessToken,
+          agentid: this.config.agentid,
+          ...message
+        });
+      }
 
       if (response.data.errcode === 0) {
         console.log('企业微信消息发送成功');
