@@ -8,9 +8,16 @@
       "destination": "/index.html"
     }
   ],
+  "redirects": [
+    {
+      "source": "/redbook-kos",
+      "destination": "/redbook-kos/",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
-      "source": "/assets/(.*)",
+      "source": "/redbook-kos/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
