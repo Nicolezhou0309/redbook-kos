@@ -3,6 +3,12 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
+    "api/wecom/token.ts": {
+      "runtime": "@vercel/node"
+    },
+    "api/wecom/send.ts": {
+      "runtime": "@vercel/node"
+    },
     "api/wecom/token-fixed.ts": {
       "runtime": "@vercel/node"
     },

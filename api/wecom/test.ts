@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('Test API called');
 
   // 设置CORS头
@@ -22,4 +22,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     method: req.method,
     url: req.url
   });
-} 
+}
+
+module.exports = handler; 
