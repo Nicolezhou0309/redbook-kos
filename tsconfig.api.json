@@ -11,9 +11,11 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx"
+    "noEmit": false,
+    "outDir": "./dist",
+    "declaration": false,
+    "allowJs": true
   },
   "include": ["api/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist"]
 } 

@@ -9,6 +9,8 @@
     "dev:server": "node server.js",
     "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\"",
     "build": "tsc && vite build",
+    "build:api": "tsc -p tsconfig.api.json",
+    "build:all": "npm run build:api && npm run build",
     "lint": "eslint . --max-warnings 0",
     "preview": "vite preview"
   },

@@ -18,17 +18,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { access_token, agentid, ...messageData } = req.body;
+    const { access_token, ...messageData } = req.body;
 
-    if (!access_token || !agentid) {
-      return res.status(400).json({ error: 'Missing access_token or agentid' });
+    if (!access_token) {
+      return res.status(400).json({ error: 'Missing access_token' });
     }
 
-    const response = await axios.post('https://qyapi.weixin.qq.com/cgi-bin/message/send', {
-      access_token,
-      agentid,
-      ...messageData
-    });
+    const response = await axios.post(
+      `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${access_token}`,
+      messageData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
     res.json(response.data);
   } catch (error) {
