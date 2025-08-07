@@ -1080,7 +1080,6 @@ const EmployeeSimpleJoin: React.FC = () => {
           </Col>
           <Col span={8}>
             <Space>
-              <span>时间范围:</span>
               <RangePicker
                 value={timeRangeFilter}
                 onChange={handleTimeRangeChange}
