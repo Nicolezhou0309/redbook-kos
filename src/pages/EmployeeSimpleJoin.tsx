@@ -25,8 +25,6 @@ import {
   FilterOutlined,
   ReloadOutlined,
   EyeOutlined,
-  SortAscendingOutlined,
-  SortDescendingOutlined,
   MoreOutlined,
   DownloadOutlined,
   UploadOutlined
@@ -94,7 +92,7 @@ const EmployeeSimpleJoin: React.FC = () => {
   const [notesLoading, setNotesLoading] = useState(false)
   const [iframeModalVisible, setIframeModalVisible] = useState(false)
   const [selectedNoteLink, setSelectedNoteLink] = useState('')
-  const [selectedNoteTitle, setSelectedNoteTitle] = useState('')
+  const [, setSelectedNoteTitle] = useState('')
   
   // 选择状态管理
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
@@ -442,7 +440,7 @@ const EmployeeSimpleJoin: React.FC = () => {
   }
 
   // 处理时间范围筛选
-  const handleTimeRangeChange = (dates: any, dateStrings: [string, string]) => {
+  const handleTimeRangeChange = (dates: any) => {
     setTimeRangeFilter(dates)
     if (dates && dates[0] && dates[1]) {
       setFilters(prev => ({

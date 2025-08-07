@@ -46,10 +46,7 @@ export interface ViolationRecord {
  * @returns 违规状态
  */
 export function calculateViolationStatus(
-  violations: ViolationRecord[], 
-  currentWeek?: string
-): ViolationStatus {
-  const currentWeekStr = currentWeek || dayjs().format('YYYY-WW');
+  violations: ViolationRecord[]): ViolationStatus {
   
   // 按周分组违规记录
   const violationsByWeek = groupViolationsByWeek(violations);

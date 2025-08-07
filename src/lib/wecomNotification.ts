@@ -41,10 +41,9 @@ export class WeComNotificationService {
 
   constructor(config: WeComConfig) {
     this.config = config;
-    // 根据环境选择API地址
     this.baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://nicole.xin/api/wecom'  // 更新为实际域名
-      : '/api/wecom';
+      ? 'https://nicole.xin/api/wecom'  // 生产环境
+      : '/api/wecom';  // 开发环境使用代理
   }
 
   // 获取访问令牌

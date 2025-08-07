@@ -3,10 +3,10 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "api/wecom/token-simple.ts": {
+    "api/wecom/token-fixed.ts": {
       "runtime": "@vercel/node"
     },
-    "api/wecom/send-simple.ts": {
+    "api/wecom/send-fixed.ts": {
       "runtime": "@vercel/node"
     },
     "api/wecom/test.ts": {
@@ -16,11 +16,11 @@
   "routes": [
     {
       "src": "/api/wecom/token",
-      "dest": "/api/wecom/token-simple"
+      "dest": "/api/wecom/token-fixed"
     },
     {
       "src": "/api/wecom/send",
-      "dest": "/api/wecom/send-simple"
+      "dest": "/api/wecom/send-fixed"
     },
     {
       "src": "/api/wecom/(.*)",
