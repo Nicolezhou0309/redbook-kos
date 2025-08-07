@@ -17,101 +17,223 @@ interface EmployeeListForm {
   activation_time?: string;
 }
 
+interface PaginationParams {
+  page: number;
+  pageSize: number;
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export const employeeManageApi = {
-  // 获取所有员工列表
-  async getEmployeeList(): Promise<EmployeeListData[]> {
+  // 获取所有员工列表（带分页）
+  async getEmployeeList(params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true });
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
       const { data, error } = await supabase
         .from('employee_list')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) {
         throw error;
       }
 
-      return data || [];
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
     } catch (error) {
       console.error('获取员工列表失败:', error);
       throw error;
     }
   },
 
-  // 根据员工姓名搜索
-  async searchEmployeeByName(name: string): Promise<EmployeeListData[]> {
+  // 根据员工姓名搜索（带分页）
+  async searchEmployeeByName(name: string, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true })
+        .ilike('employee_name', `%${name}%`);
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
       const { data, error } = await supabase
         .from('employee_list')
         .select('*')
         .ilike('employee_name', `%${name}%`)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) {
         throw error;
       }
 
-      return data || [];
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
     } catch (error) {
       console.error('搜索员工失败:', error);
       throw error;
     }
   },
 
-  // 根据员工UID搜索
-  async searchEmployeeByUid(uid: string): Promise<EmployeeListData[]> {
+  // 根据员工UID搜索（带分页）
+  async searchEmployeeByUid(uid: string, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true })
+        .ilike('employee_uid', `%${uid}%`);
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
       const { data, error } = await supabase
         .from('employee_list')
         .select('*')
         .ilike('employee_uid', `%${uid}%`)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) {
         throw error;
       }
 
-      return data || [];
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
     } catch (error) {
       console.error('搜索员工失败:', error);
       throw error;
     }
   },
 
-  // 根据开通时间搜索
-  async searchEmployeeByActivationTime(timeRange: { start: string; end: string }): Promise<EmployeeListData[]> {
+  // 根据开通时间搜索（带分页）
+  async searchEmployeeByActivationTime(timeRange: { start: string; end: string }, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true })
+        .gte('activation_time', timeRange.start)
+        .lte('activation_time', timeRange.end);
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
       const { data, error } = await supabase
         .from('employee_list')
         .select('*')
         .gte('activation_time', timeRange.start)
         .lte('activation_time', timeRange.end)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) {
         throw error;
       }
 
-      return data || [];
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
     } catch (error) {
       console.error('按开通时间搜索员工失败:', error);
       throw error;
     }
   },
 
-  // 根据状态筛选
-  async getEmployeeByStatus(status: string): Promise<EmployeeListData[]> {
+  // 根据状态筛选（带分页）
+  async getEmployeeByStatus(status: string, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true })
+        .ilike('status', `%${status}%`);
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
       const { data, error } = await supabase
         .from('employee_list')
         .select('*')
         .ilike('status', `%${status}%`)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) {
         throw error;
       }
 
-      return data || [];
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
     } catch (error) {
       console.error('获取员工状态失败:', error);
       throw error;
@@ -346,19 +468,40 @@ export const employeeManageApi = {
     }
   },
 
-  // 获取员工列表
-  async getEmployeeListWithViolations(): Promise<EmployeeListData[]> {
+  // 获取员工列表（带分页）
+  async getEmployeeListWithViolations(params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true });
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
       const { data, error } = await supabase
         .from('employee_list')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
       if (error) {
         throw error;
       }
 
-      return data || [];
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
     } catch (error) {
       console.error('获取员工列表失败:', error);
       throw error;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Button, Avatar, Dropdown, Space, Typography, Badge, Tooltip, message } from 'antd';
+import { Layout, Button, Avatar, Dropdown, Space, Typography, Badge, Tooltip, App } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -14,8 +14,9 @@ import { useNavigate } from 'react-router-dom';
 import { logoutUser } from '../../lib/authApi';
 import { useAuth } from '../../contexts/AuthContext';
 
-const { Header } = Layout;
+const { Header: AntHeader } = Layout;
 const { Title } = Typography;
+const { Text } = Typography;
 
 interface HeaderProps {
   collapsed: boolean;
@@ -25,6 +26,7 @@ interface HeaderProps {
 const AppHeader: React.FC<HeaderProps> = ({ collapsed, onCollapse }) => {
   const navigate = useNavigate();
   const { user, setUser } = useAuth();
+  const { message } = App.useApp();
 
   const userMenuItems: MenuProps['items'] = [
     {
@@ -69,7 +71,7 @@ const AppHeader: React.FC<HeaderProps> = ({ collapsed, onCollapse }) => {
   };
 
   return (
-    <Header
+    <AntHeader
       style={{
         padding: '0 24px',
         background: '#fff',
@@ -114,7 +116,7 @@ const AppHeader: React.FC<HeaderProps> = ({ collapsed, onCollapse }) => {
           </Space>
         </Dropdown>
       </Space>
-    </Header>
+    </AntHeader>
   );
 };
 

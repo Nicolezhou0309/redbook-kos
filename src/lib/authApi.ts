@@ -68,24 +68,37 @@ export const sendRegistrationEmail = async (email: string): Promise<AuthResponse
 // 用户登录
 export const loginUser = async (loginData: LoginData): Promise<AuthResponse> => {
   try {
+    console.log('尝试登录:', { email: loginData.email });
+    
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginData.email,
       password: loginData.password,
     });
 
     if (error) {
+      console.error('登录错误:', error);
       return {
         success: false,
-        message: error.message
+        message: error.message || '登录失败，请检查邮箱和密码'
       };
     }
 
+    if (!data.user) {
+      console.error('登录失败: 没有返回用户数据');
+      return {
+        success: false,
+        message: '登录失败，请检查邮箱和密码'
+      };
+    }
+
+    console.log('登录成功:', data.user);
     return {
       success: true,
       message: '登录成功',
       data: data.user
     };
   } catch (error) {
+    console.error('登录异常:', error);
     return {
       success: false,
       message: '登录失败，请检查网络连接'

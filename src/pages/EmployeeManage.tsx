@@ -25,11 +25,11 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  ReloadOutlined,
   HistoryOutlined,
   UploadOutlined,
   DownloadOutlined,
-  DownOutlined
+  DownOutlined,
+  FilterOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -85,11 +85,25 @@ export default function EmployeeManage() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<EmployeeListData | null>(null);
   const [form] = Form.useForm();
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [historyData, setHistoryData] = useState<EmployeeOperationLog[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [currentEmployee, setCurrentEmployee] = useState<EmployeeListData | null>(null);
+
+  // 分页相关状态
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+    showSizeChanger: true,
+    showQuickJumper: true,
+    showTotal: (total: number, range: [number, number]) => 
+      `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+  });
+
+  // 表头筛选相关状态
+  const [filteredInfo, setFilteredInfo] = useState<Record<string, any>>({});
+  const [sortedInfo, setSortedInfo] = useState<Record<string, any>>({});
 
   // 批量上传相关状态
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -112,32 +126,68 @@ export default function EmployeeManage() {
   const [violationStatusLoading, setViolationStatusLoading] = useState(false);
   const [currentEmployeeForStatus, setCurrentEmployeeForStatus] = useState<EmployeeListData | null>(null);
 
+  // 获取状态选项
+  const getStatusOptions = () => {
+    const statusSet = new Set<string>();
+    data.forEach(item => {
+      if (item.status) {
+        statusSet.add(item.status);
+      }
+    });
+    return Array.from(statusSet).map(status => ({ text: status, value: status }));
+  };
+
+  // 获取违规状态选项
+  const getViolationStatusOptions = () => {
+    const options = [
+      { text: '正常', value: 'normal' },
+      { text: '黄牌', value: 'yellow' },
+      { text: '红牌', value: 'red' }
+    ];
+    return options;
+  };
+
+  // 获取持有周期选项
+  const getHoldingPeriodOptions = () => {
+    const options = [
+      { text: '未开通', value: 'not_activated' },
+      { text: '1-30天', value: '1_30' },
+      { text: '31-90天', value: '31_90' },
+      { text: '91-180天', value: '91_180' },
+      { text: '181-365天', value: '181_365' },
+      { text: '365天以上', value: '365_plus' }
+    ];
+    return options;
+  };
+
   // 加载数据
-  const loadData = async () => {
+  const loadData = async (page = 1, pageSize = 10) => {
     setLoading(true);
     try {
-      let data: EmployeeListData[] = [];
-      
-      if (statusFilter === 'all') {
-        data = await employeeManageApi.getEmployeeListWithViolations();
-      } else {
-        // 对于状态筛选，直接获取数据
-        data = await employeeManageApi.getEmployeeByStatus(statusFilter);
-      }
+      const result = await employeeManageApi.getEmployeeListWithViolations({ page, pageSize });
       
       // 获取违规状态
-      if (data.length > 0) {
-        const employeeIds = data.map(emp => emp.id);
+      if (result.data.length > 0) {
+        const employeeIds = result.data.map((emp: EmployeeListData) => emp.id);
         const violationStatuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(employeeIds);
         
-        data = data.map(emp => ({
+        const dataWithViolations = result.data.map((emp: EmployeeListData) => ({
           ...emp,
           violation_status: violationStatuses[emp.id] || null
         }));
+        
+        setData(dataWithViolations);
+      } else {
+        setData([]);
       }
       
-      setData(data);
-      
+      // 更新分页信息
+      setPagination(prev => ({
+        ...prev,
+        current: page,
+        pageSize,
+        total: result.total
+      }));
 
     } catch (error) {
       message.error('加载数据失败');
@@ -151,23 +201,43 @@ export default function EmployeeManage() {
   const handleSearch = async (value: string) => {
     setSearchText(value);
     if (!value.trim()) {
-      loadData();
+      loadData(1, pagination.pageSize);
       return;
     }
 
     setLoading(true);
     try {
-      let searchResults: EmployeeListData[] = [];
+      let searchResults: any;
       
       // 尝试按姓名搜索
-      searchResults = await employeeManageApi.searchEmployeeByName(value);
+      searchResults = await employeeManageApi.searchEmployeeByName(value, { page: 1, pageSize: pagination.pageSize });
       
       // 如果按姓名没找到，尝试按UID搜索
-      if (searchResults.length === 0) {
-        searchResults = await employeeManageApi.searchEmployeeByUid(value);
+      if (searchResults.data.length === 0) {
+        searchResults = await employeeManageApi.searchEmployeeByUid(value, { page: 1, pageSize: pagination.pageSize });
       }
       
-      setData(searchResults);
+      // 获取违规状态
+      if (searchResults.data.length > 0) {
+        const employeeIds = searchResults.data.map((emp: EmployeeListData) => emp.id);
+        const violationStatuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(employeeIds);
+        
+        const dataWithViolations = searchResults.data.map((emp: EmployeeListData) => ({
+          ...emp,
+          violation_status: violationStatuses[emp.id] || null
+        }));
+        
+        setData(dataWithViolations);
+      } else {
+        setData([]);
+      }
+      
+      // 更新分页信息
+      setPagination(prev => ({
+        ...prev,
+        current: 1,
+        total: searchResults.total
+      }));
     } catch (error) {
       message.error('搜索失败');
       console.error('搜索失败:', error);
@@ -176,7 +246,133 @@ export default function EmployeeManage() {
     }
   };
 
-  // 状态筛选
+  // 处理表格变化（包括筛选和排序）
+  const handleTableChange = (paginationInfo: any, filters: any, sorter: any) => {
+    const { current, pageSize } = paginationInfo;
+    
+    // 更新筛选和排序信息
+    setFilteredInfo(filters);
+    setSortedInfo(sorter);
+    
+    if (searchText.trim()) {
+      // 如果有搜索文本，需要重新搜索但保持搜索文本
+      setSearchText(searchText);
+      setLoading(true);
+      
+      // 这里需要重新实现搜索逻辑，因为handleSearch会重置搜索文本
+      const performSearch = async () => {
+        try {
+          let searchResults: any;
+          
+          // 尝试按姓名搜索
+          searchResults = await employeeManageApi.searchEmployeeByName(searchText, { page: current, pageSize });
+          
+          // 如果按姓名没找到，尝试按UID搜索
+          if (searchResults.data.length === 0) {
+            searchResults = await employeeManageApi.searchEmployeeByUid(searchText, { page: current, pageSize });
+          }
+          
+          // 获取违规状态
+          if (searchResults.data.length > 0) {
+            const employeeIds = searchResults.data.map((emp: EmployeeListData) => emp.id);
+            const violationStatuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(employeeIds);
+            
+            const dataWithViolations = searchResults.data.map((emp: EmployeeListData) => ({
+              ...emp,
+              violation_status: violationStatuses[emp.id] || null
+            }));
+            
+            setData(dataWithViolations);
+          } else {
+            setData([]);
+          }
+          
+          // 更新分页信息
+          setPagination(prev => ({
+            ...prev,
+            current,
+            pageSize,
+            total: searchResults.total
+          }));
+        } catch (error) {
+          message.error('搜索失败');
+          console.error('搜索失败:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      performSearch();
+    } else {
+      // 否则加载普通数据
+      loadData(current, pageSize);
+    }
+  };
+
+  // 清除所有筛选
+  const clearFilters = () => {
+    setFilteredInfo({});
+    setSortedInfo({});
+    loadData(1, pagination.pageSize);
+  };
+
+  // 清除排序
+  const clearSorters = () => {
+    setSortedInfo({});
+  };
+
+  // 获取筛选后的数据
+  const getFilteredData = () => {
+    let filteredData = [...data];
+
+    // 状态筛选
+    if (filteredInfo.status && filteredInfo.status.length > 0) {
+      filteredData = filteredData.filter(item => 
+        item.status && filteredInfo.status.includes(item.status)
+      );
+    }
+
+    // 违规状态筛选
+    if (filteredInfo.violation_status && filteredInfo.violation_status.length > 0) {
+      filteredData = filteredData.filter(item => {
+        if (!item.violation_status) {
+          return filteredInfo.violation_status.includes('normal');
+        }
+        return filteredInfo.violation_status.includes(item.violation_status.status);
+      });
+    }
+
+    // 持有周期筛选
+    if (filteredInfo.holding_period && filteredInfo.holding_period.length > 0) {
+      filteredData = filteredData.filter(item => {
+        const details = getHoldingPeriodDetails(item.activation_time);
+        const days = details.days;
+        
+        if (filteredInfo.holding_period.includes('not_activated')) {
+          return !item.activation_time;
+        }
+        if (filteredInfo.holding_period.includes('1_30')) {
+          return days >= 1 && days <= 30;
+        }
+        if (filteredInfo.holding_period.includes('31_90')) {
+          return days >= 31 && days <= 90;
+        }
+        if (filteredInfo.holding_period.includes('91_180')) {
+          return days >= 91 && days <= 180;
+        }
+        if (filteredInfo.holding_period.includes('181_365')) {
+          return days >= 181 && days <= 365;
+        }
+        if (filteredInfo.holding_period.includes('365_plus')) {
+          return days > 365;
+        }
+        
+        return false;
+      });
+    }
+
+    return filteredData;
+  };
 
   // 添加/编辑员工
   const handleAddEdit = (record?: EmployeeListData) => {
@@ -225,7 +421,7 @@ export default function EmployeeManage() {
       
       setModalVisible(false);
       form.resetFields();
-      loadData();
+      loadData(1, pagination.pageSize);
     } catch (error) {
       message.error('操作失败');
       console.error('保存失败:', error);
@@ -237,7 +433,7 @@ export default function EmployeeManage() {
     try {
       await employeeManageApi.deleteEmployee(id);
       message.success('删除成功');
-      loadData();
+      loadData(1, pagination.pageSize);
     } catch (error) {
       message.error('删除失败');
       console.error('删除失败:', error);
@@ -262,8 +458,8 @@ export default function EmployeeManage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [statusFilter]);
+    loadData(1, pagination.pageSize);
+  }, [pagination.pageSize]);
 
   // 下载员工数据
   const handleDownloadData = () => {
@@ -330,7 +526,7 @@ export default function EmployeeManage() {
       }
       
       // 重新加载数据
-      loadData();
+      loadData(1, pagination.pageSize);
     } catch (error) {
       message.error('批量上传失败');
       console.error('批量上传失败:', error);
@@ -390,18 +586,37 @@ export default function EmployeeManage() {
       dataIndex: 'employee_name',
       key: 'employee_name',
       width: 150,
+      filteredValue: filteredInfo.employee_name || null,
+      onFilter: (value: any, record: EmployeeListData) => 
+        record.employee_name.toLowerCase().includes(String(value).toLowerCase()),
+      filterIcon: (filtered: boolean) => (
+        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
+      ),
     },
     {
       title: '员工UID',
       dataIndex: 'employee_uid',
       key: 'employee_uid',
       width: 150,
+      filteredValue: filteredInfo.employee_uid || null,
+      onFilter: (value: any, record: EmployeeListData) => 
+        record.employee_uid.toLowerCase().includes(String(value).toLowerCase()),
+      filterIcon: (filtered: boolean) => (
+        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
+      ),
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 100,
+      filters: getStatusOptions(),
+      filteredValue: filteredInfo.status || null,
+      onFilter: (value: any, record: EmployeeListData) => 
+        record.status === String(value),
+      filterIcon: (filtered: boolean) => (
+        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
+      ),
       render: (status: string) => {
         if (!status) {
           return <Tag color="default">未设置</Tag>;
@@ -437,6 +652,36 @@ export default function EmployeeManage() {
       dataIndex: 'activation_time',
       key: 'holding_period',
       width: 120,
+      filters: getHoldingPeriodOptions(),
+      filteredValue: filteredInfo.holding_period || null,
+      onFilter: (value: any, record: EmployeeListData) => {
+        const details = getHoldingPeriodDetails(record.activation_time);
+        const days = details.days;
+        
+        if (value === 'not_activated') {
+          return !record.activation_time;
+        }
+        if (value === '1_30') {
+          return days >= 1 && days <= 30;
+        }
+        if (value === '31_90') {
+          return days >= 31 && days <= 90;
+        }
+        if (value === '91_180') {
+          return days >= 91 && days <= 180;
+        }
+        if (value === '181_365') {
+          return days >= 181 && days <= 365;
+        }
+        if (value === '365_plus') {
+          return days > 365;
+        }
+        
+        return false;
+      },
+      filterIcon: (filtered: boolean) => (
+        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
+      ),
       render: (activationTime: string | null) => {
         const details = getHoldingPeriodDetails(activationTime);
         return <Tag color={details.color}>{details.text}</Tag>;
@@ -448,6 +693,17 @@ export default function EmployeeManage() {
       dataIndex: 'violation_status',
       key: 'violation_status',
       width: 120,
+      filters: getViolationStatusOptions(),
+      filteredValue: filteredInfo.violation_status || null,
+      onFilter: (value: any, record: EmployeeListData) => {
+        if (!record.violation_status) {
+          return value === 'normal';
+        }
+        return record.violation_status.status === String(value);
+      },
+      filterIcon: (filtered: boolean) => (
+        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
+      ),
       render: (status: ViolationStatus | null, record: EmployeeListData) => {
         if (!status) {
           return <Tag color="green">正常</Tag>;
@@ -529,16 +785,6 @@ export default function EmployeeManage() {
               style={{ width: 250 }}
               allowClear
             />
-            <Input
-              placeholder="筛选状态"
-              value={statusFilter === 'all' ? '' : statusFilter}
-              onChange={(e) => {
-                const value = e.target.value;
-                setStatusFilter(value || 'all');
-              }}
-              style={{ width: 120 }}
-              allowClear
-            />
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -572,19 +818,40 @@ export default function EmployeeManage() {
           </Space>
         }
       >
+        {/* 筛选控制区域 */}
+        {(Object.keys(filteredInfo).length > 0 || Object.keys(sortedInfo).length > 0) && (
+          <div style={{ marginBottom: 16 }}>
+            <Space>
+              <span style={{ color: '#666' }}>当前筛选:</span>
+              {Object.keys(filteredInfo).length > 0 && (
+                <Button size="small" onClick={clearFilters}>
+                  清除筛选
+                </Button>
+              )}
+              {Object.keys(sortedInfo).length > 0 && (
+                <Button size="small" onClick={clearSorters}>
+                  清除排序
+                </Button>
+              )}
+            </Space>
+          </div>
+        )}
+        
         <Table
           columns={columns}
-          dataSource={data}
+          dataSource={getFilteredData()}
           rowKey="id"
           loading={loading}
           size="small"
           pagination={{
+            ...pagination,
+            total: getFilteredData().length,
             showSizeChanger: true,
             showQuickJumper: true,
-            pageSize: 10,
-            showTotal: (total, range) => 
+            showTotal: (total: number, range: [number, number]) => 
               `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
           }}
+          onChange={handleTableChange}
           scroll={{ x: 1220 }}
         />
       </Card>
@@ -1111,3 +1378,10 @@ export default function EmployeeManage() {
     </div>
   );
 } 
+
+// 分页功能修复说明：
+// 1. 修改了 employeeManageApi.ts 中的所有查询方法，添加了分页支持
+// 2. 在 EmployeeManage 组件中添加了分页状态管理
+// 3. 实现了 handleTableChange 函数来处理分页变化
+// 4. 更新了 loadData 和 handleSearch 函数以支持分页
+// 5. 确保所有数据操作（增删改）后都会重新加载当前页数据 

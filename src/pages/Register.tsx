@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, Typography, message, Steps, Divider } from 'antd';
+import { Form, Input, Button, Card, Typography, Steps, Divider, App } from 'antd';
 import { MailOutlined, LockOutlined, SafetyOutlined, CheckCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { validateInviteCode, sendRegistrationEmail, registerUser } from '../lib/authApi';
@@ -20,6 +20,7 @@ const Register: React.FC = () => {
   const [inviteCodeValid, setInviteCodeValid] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const navigate = useNavigate();
+  const { message } = App.useApp();
 
   const validateInviteCodeHandler = async (inviteCode: string) => {
     setLoading(true);

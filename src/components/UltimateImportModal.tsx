@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Modal, Button, Progress, message, Card, Tag, Space, Tabs, Table, Typography, Row, Col, DatePicker, Input, Select } from 'antd';
+import { Modal, Button, Progress, Card, Tag, Space, Tabs, Table, Typography, Row, Col, DatePicker, Input, Select, App } from 'antd';
 import { InboxOutlined, DeleteOutlined, EyeOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { employeeApi } from '../lib/employeeApi';
 import { employeeLeadsApi } from '../lib/employeeLeadsApi';
@@ -65,6 +65,7 @@ const UltimateImportModal: React.FC<UltimateImportModalProps> = ({ visible, onCl
   const [selectedDateRange, setSelectedDateRange] = useState<[string, string] | null>(null);
   const [selectedRemark, setSelectedRemark] = useState<string>('');
   const [globalSettingsCollapsed, setGlobalSettingsCollapsed] = useState(true); // 全局设置默认折叠
+  const { message } = App.useApp();
 
   // 文件类型识别函数
   const identifyFileType = (fileName: string, fileType: string, columns?: string[]): 'employee' | 'leads' | 'unknown' => {

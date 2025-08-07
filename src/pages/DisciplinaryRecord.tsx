@@ -5,7 +5,6 @@ import {
   Modal, 
   Form, 
   Input, 
-  message, 
   Space, 
   Popconfirm, 
   Card, 
@@ -17,7 +16,8 @@ import {
   Tag,
   Tooltip,
   Typography,
-  Divider
+  Divider,
+  App
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -45,6 +45,7 @@ interface Statistics {
 }
 
 const DisciplinaryRecord: React.FC = () => {
+  const { message } = App.useApp();
   const [records, setRecords] = useState<DisciplinaryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Typography, message, Divider, Space } from 'antd';
-import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Typography, Divider, App } from 'antd';
+import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { loginUser } from '../lib/authApi';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +19,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { setUser } = useAuth();
+  const { message } = App.useApp();
 
   const onFinish = async (values: LoginFormData) => {
     setLoading(true);

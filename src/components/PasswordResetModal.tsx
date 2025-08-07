@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Form, Input, Button, message, Typography } from 'antd';
+import { Modal, Form, Input, Button, Typography, App } from 'antd';
 import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { sendPasswordResetEmail } from '../lib/authApi';
 
@@ -10,11 +10,10 @@ interface PasswordResetModalProps {
   onCancel: () => void;
 }
 
-const PasswordResetModal: React.FC<PasswordResetModalProps> = ({
-  visible,
-  onCancel
-}) => {
+const PasswordResetModal: React.FC<PasswordResetModalProps> = ({ visible, onCancel }) => {
   const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const { message } = App.useApp();
   const [form] = Form.useForm();
 
   const handleSubmit = async (values: { email: string }) => {
