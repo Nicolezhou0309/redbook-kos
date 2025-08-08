@@ -612,19 +612,19 @@ BEGIN
     IF yellow_card_start_date IS NOT NULL AND yellow_card_end_date IS NOT NULL THEN
       where_conditions := array_append(where_conditions, format('(
         (eld.time_range->>''start_date'')::DATE <= ''%s''::DATE AND (eld.time_range->>''end_date'')::DATE >= ''%s''::DATE
-      ) OR (
+      ) AND (
         (erd.time_range->>''start_date'')::DATE <= ''%s''::DATE AND (erd.time_range->>''end_date'')::DATE >= ''%s''::DATE
       )', yellow_card_end_date, yellow_card_start_date, yellow_card_end_date, yellow_card_start_date));
     ELSIF yellow_card_start_date IS NOT NULL THEN
       where_conditions := array_append(where_conditions, format('(
         (eld.time_range->>''end_date'')::DATE >= ''%s''::DATE
-      ) OR (
+      ) AND (
         (erd.time_range->>''end_date'')::DATE >= ''%s''::DATE
       )', yellow_card_start_date, yellow_card_start_date));
     ELSIF yellow_card_end_date IS NOT NULL THEN
       where_conditions := array_append(where_conditions, format('(
         (eld.time_range->>''start_date'')::DATE <= ''%s''::DATE
-      ) OR (
+      ) AND (
         (erd.time_range->>''start_date'')::DATE <= ''%s''::DATE
       )', yellow_card_end_date, yellow_card_end_date));
     END IF;

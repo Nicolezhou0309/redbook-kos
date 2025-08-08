@@ -8,6 +8,9 @@ interface EmployeeListData {
   status: string | null;
   activation_time: string | null;
   created_at: string;
+  violation_status?: string | null;
+  current_yellow_cards?: number | null;
+  current_red_cards?: number | null;
 }
 
 interface EmployeeListForm {
@@ -73,8 +76,29 @@ export const employeeManageApi = {
   // 根据员工姓名搜索（带分页）
   async searchEmployeeByName(name: string, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
-      const page = params?.page || 1;
-      const pageSize = params?.pageSize || 10;
+      // 如果没有传入分页参数，返回所有匹配数据
+      if (!params) {
+        const { data, error } = await supabase
+          .from('employee_list')
+          .select('*')
+          .ilike('employee_name', `%${name}%`)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        return {
+          data: data || [],
+          total: data?.length || 0,
+          page: 1,
+          pageSize: data?.length || 0
+        };
+      }
+
+      // 如果有分页参数，使用分页逻辑
+      const page = params.page || 1;
+      const pageSize = params.pageSize || 10;
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
@@ -112,11 +136,32 @@ export const employeeManageApi = {
     }
   },
 
-  // 根据员工UID搜索（带分页）
+  // 根据员工UID搜索（支持分页或全部数据）
   async searchEmployeeByUid(uid: string, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
-      const page = params?.page || 1;
-      const pageSize = params?.pageSize || 10;
+      // 如果没有传入分页参数，返回所有匹配数据
+      if (!params) {
+        const { data, error } = await supabase
+          .from('employee_list')
+          .select('*')
+          .ilike('employee_uid', `%${uid}%`)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        return {
+          data: data || [],
+          total: data?.length || 0,
+          page: 1,
+          pageSize: data?.length || 0
+        };
+      }
+
+      // 如果有分页参数，使用分页逻辑
+      const page = params.page || 1;
+      const pageSize = params.pageSize || 10;
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
@@ -236,6 +281,302 @@ export const employeeManageApi = {
       };
     } catch (error) {
       console.error('获取员工状态失败:', error);
+      throw error;
+    }
+  },
+
+  // 根据持有周期筛选（带分页）
+  async getEmployeeByHoldingPeriod(period: string, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
+    try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const base = supabase.from('employee_list');
+      const applyPeriodFilters = (q: any) => {
+        switch (period) {
+          case 'not_activated':
+            return q.is('activation_time', null);
+          case '1_30':
+            return q
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lte('activation_time', new Date().toISOString().split('T')[0]);
+          case '31_90':
+            return q
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lt('activation_time', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          case '91_180':
+            return q
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lt('activation_time', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          case '181_365':
+            return q
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lt('activation_time', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          case '365_plus':
+            return q
+              .not('activation_time', 'is', null)
+              .lt('activation_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          default:
+            throw new Error('无效的持有周期类型');
+        }
+      };
+
+      // 获取总数（在 PostgrestQueryBuilder 上使用带 options 的 select）
+      const { count, error: countError } = await applyPeriodFilters(
+        base.select('*', { count: 'exact', head: true })
+      );
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
+      const { data, error } = await applyPeriodFilters(base.select('*'))
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        throw error;
+      }
+
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
+    } catch (error) {
+      console.error('获取员工持有周期失败:', error);
+      throw error;
+    }
+  },
+
+  // 根据开通时间范围筛选（带分页）
+  async getEmployeeByActivationTimeRange(timeRange: { start: string; end: string }, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
+    try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true })
+        .gte('activation_time', timeRange.start)
+        .lte('activation_time', timeRange.end);
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
+      const { data, error } = await supabase
+        .from('employee_list')
+        .select('*')
+        .gte('activation_time', timeRange.start)
+        .lte('activation_time', timeRange.end)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        throw error;
+      }
+
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
+    } catch (error) {
+      console.error('获取员工开通时间范围失败:', error);
+      throw error;
+    }
+  },
+
+  // 根据创建时间范围筛选（带分页）
+  async getEmployeeByCreatedTimeRange(timeRange: { start: string; end: string }, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
+    try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await supabase
+        .from('employee_list')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', timeRange.start)
+        .lte('created_at', timeRange.end);
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
+      const { data, error } = await supabase
+        .from('employee_list')
+        .select('*')
+        .gte('created_at', timeRange.start)
+        .lte('created_at', timeRange.end)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        throw error;
+      }
+
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
+    } catch (error) {
+      console.error('获取员工创建时间范围失败:', error);
+      throw error;
+    }
+  },
+
+  // 多条件筛选（支持分页或全部数据）
+  async getEmployeeByMultipleFilters(filters: {
+    status?: string;
+    holdingPeriod?: string;
+    violationStatus?: string | string[];
+    activationTimeRange?: { start: string; end: string };
+    createdTimeRange?: { start: string; end: string };
+  }, params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
+    try {
+      const base = supabase.from('employee_list');
+      const applyFilters = (q: any) => {
+        let next = q;
+
+      // 应用状态筛选
+      if (filters.status) {
+        next = next.ilike('status', `%${filters.status}%`);
+      }
+
+      // 应用违规状态筛选
+      if (filters.violationStatus) {
+        if (Array.isArray(filters.violationStatus)) {
+          // 多选情况
+          next = next.in('violation_status', filters.violationStatus);
+        } else {
+          // 单选情况
+          next = next.eq('violation_status', filters.violationStatus);
+        }
+      }
+
+      // 应用持有周期筛选
+      if (filters.holdingPeriod) {
+        switch (filters.holdingPeriod) {
+          case 'not_activated':
+            next = next.is('activation_time', null);
+            break;
+          case '1_30':
+            next = next
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lte('activation_time', new Date().toISOString().split('T')[0]);
+            break;
+          case '31_90':
+            next = next
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lt('activation_time', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+            break;
+          case '91_180':
+            next = next
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lt('activation_time', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+            break;
+          case '181_365':
+            next = next
+              .not('activation_time', 'is', null)
+              .gte('activation_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+              .lt('activation_time', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+            break;
+          case '365_plus':
+            next = next
+              .not('activation_time', 'is', null)
+              .lt('activation_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+            break;
+        }
+      }
+
+      // 应用开通时间范围筛选
+      if (filters.activationTimeRange) {
+        next = next
+          .gte('activation_time', filters.activationTimeRange.start)
+          .lte('activation_time', filters.activationTimeRange.end);
+      }
+
+      // 应用创建时间范围筛选
+      if (filters.createdTimeRange) {
+        next = next
+          .gte('created_at', filters.createdTimeRange.start)
+          .lte('created_at', filters.createdTimeRange.end);
+      }
+      return next;
+    };
+
+      // 如果没有传入分页参数，返回所有匹配数据
+      if (!params) {
+        const { data, error } = await applyFilters(base.select('*'))
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        return {
+          data: data || [],
+          total: data?.length || 0,
+          page: 1,
+          pageSize: data?.length || 0
+        };
+      }
+
+      // 如果有分页参数，使用分页逻辑
+      const page = params.page || 1;
+      const pageSize = params.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 获取总数
+      const { count, error: countError } = await applyFilters(
+        base.select('*', { count: 'exact', head: true })
+      );
+
+      if (countError) {
+        throw countError;
+      }
+
+      // 获取分页数据
+      const { data, error } = await applyFilters(base.select('*'))
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        throw error;
+      }
+
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
+    } catch (error) {
+      console.error('多条件筛选员工失败:', error);
       throw error;
     }
   },
@@ -468,11 +809,39 @@ export const employeeManageApi = {
     }
   },
 
-  // 获取员工列表（带分页）
+  // 获取员工列表（支持分页或全部数据）
   async getEmployeeListWithViolations(params?: PaginationParams): Promise<PaginatedResponse<EmployeeListData>> {
     try {
-      const page = params?.page || 1;
-      const pageSize = params?.pageSize || 10;
+      // 如果没有传入分页参数，返回所有数据
+      if (!params) {
+        const { data, error } = await supabase
+          .from('employee_list')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        // 确保数据包含违规状态信息
+        const dataWithViolations = data?.map(emp => ({
+          ...emp,
+          violation_status: emp.violation_status || 'normal',
+          current_yellow_cards: emp.current_yellow_cards || 0,
+          current_red_cards: emp.current_red_cards || 0
+        })) || [];
+
+        return {
+          data: dataWithViolations,
+          total: dataWithViolations.length,
+          page: 1,
+          pageSize: dataWithViolations.length
+        };
+      }
+
+      // 如果有分页参数，使用分页逻辑
+      const page = params.page || 1;
+      const pageSize = params.pageSize || 10;
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
@@ -496,8 +865,16 @@ export const employeeManageApi = {
         throw error;
       }
 
+      // 确保数据包含违规状态信息
+      const dataWithViolations = data?.map(emp => ({
+        ...emp,
+        violation_status: emp.violation_status || 'normal',
+        current_yellow_cards: emp.current_yellow_cards || 0,
+        current_red_cards: emp.current_red_cards || 0
+      })) || [];
+
       return {
-        data: data || [],
+        data: dataWithViolations,
         total: count || 0,
         page,
         pageSize

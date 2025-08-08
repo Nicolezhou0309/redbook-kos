@@ -19,18 +19,22 @@
       "runtime": "@vercel/node@5.3.11"
     }
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/wecom/token",
-      "dest": "/api/wecom/token-fixed"
+      "source": "/api/wecom/token",
+      "destination": "/api/wecom/token-fixed"
     },
     {
-      "src": "/api/wecom/send",
-      "dest": "/api/wecom/send-fixed"
+      "source": "/api/wecom/send",
+      "destination": "/api/wecom/send-fixed"
     },
     {
-      "src": "/api/wecom/(.*)",
-      "dest": "/api/wecom/$1"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 } 

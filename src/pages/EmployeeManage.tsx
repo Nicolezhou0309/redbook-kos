@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { 
-  Layout, 
   Card, 
   Table, 
   Tag, 
@@ -10,16 +9,15 @@ import {
   Modal, 
   Form, 
   App, 
-  Select,
   Popconfirm,
   Tooltip,
   Spin,
-  Timeline,
   DatePicker,
   Upload,
   Progress,
   Alert,
-  Dropdown
+  Dropdown,
+  Menu
 } from 'antd';
 import {
   PlusOutlined,
@@ -29,14 +27,16 @@ import {
   UploadOutlined,
   DownloadOutlined,
   DownOutlined,
-  FilterOutlined
+  FilterOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
+// 额外用于“重置违规记录”的图标
+import { StopOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
 import { employeeManageApi } from '../lib/employeeManageApi';
-import { employeeOperationLogApi } from '../lib/employeeOperationLogApi';
-import type { EmployeeOperationLog } from '../lib/employeeOperationLogApi';
-import { disciplinaryRecordApi } from '../lib/disciplinaryRecordApi';
+
+import { disciplinaryRecordApi } from '../lib/disciplinaryRecordApi.ts';
 import { 
   downloadEmployeeData, 
   parseEmployeeExcelFile, 
@@ -48,9 +48,16 @@ import {
   getStatusDisplayText, 
   getStatusColor, 
   getStatusDescription,
-  getYellowCardsToRedCard,
-  type ViolationStatus 
+  getYellowCardsToRedCard
 } from '../utils/violationStatusUtils';
+// 定义违规状态类型
+interface ViolationStatus {
+  employeeId: string;
+  employeeName: string;
+  currentYellowCards: number;
+  currentRedCards: number;
+  status: 'normal' | 'yellow' | 'red';
+}
 
 // 定义类型
 interface EmployeeListData {
@@ -60,50 +67,36 @@ interface EmployeeListData {
   status: string | null;
   activation_time: string | null;
   created_at: string;
-  violation_status?: ViolationStatus | null;
-}
-
-interface EmployeeListForm {
-  employee_name: string;
-  employee_uid: string;
-  status?: string;
-  activation_time?: string;
+  violation_status?: string | null;
+  current_yellow_cards?: number | null;
+  current_red_cards?: number | null;
 }
 
 
 
 
-const { Content } = Layout;
+
+
 const { Search } = Input;
-const { Option } = Select;
 
 export default function EmployeeManage() {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<EmployeeListData[]>([]);
-  const [searchText, setSearchText] = useState('');
+  // 原始数据（用于前端筛选的基准数据）
+  const [allData, setAllData] = useState<EmployeeListData[]>([]);
+  const [, setSearchText] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState<EmployeeListData | null>(null);
   const [form] = Form.useForm();
-  const [historyModalVisible, setHistoryModalVisible] = useState(false);
-  const [historyData, setHistoryData] = useState<EmployeeOperationLog[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [currentEmployee, setCurrentEmployee] = useState<EmployeeListData | null>(null);
 
-  // 分页相关状态
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 10,
-    total: 0,
-    showSizeChanger: true,
-    showQuickJumper: true,
-    showTotal: (total: number, range: [number, number]) => 
-      `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-  });
+
+  // 移除分页相关状态
 
   // 表头筛选相关状态
   const [filteredInfo, setFilteredInfo] = useState<Record<string, any>>({});
-  const [sortedInfo, setSortedInfo] = useState<Record<string, any>>({});
+
+
 
   // 批量上传相关状态
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -126,10 +119,122 @@ export default function EmployeeManage() {
   const [violationStatusLoading, setViolationStatusLoading] = useState(false);
   const [currentEmployeeForStatus, setCurrentEmployeeForStatus] = useState<EmployeeListData | null>(null);
 
+
+  
+  // 批量选择相关状态
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const onSelectChange = (newSelectedRowKeys: React.Key[]) => {
+    setSelectedRowKeys(newSelectedRowKeys as string[]);
+  };
+
+  // 行右键菜单状态
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    record: EmployeeListData | null;
+  }>({ visible: false, x: 0, y: 0, record: null });
+
+  const closeContextMenu = () => setContextMenu(prev => ({ ...prev, visible: false }));
+
+  useEffect(() => {
+    const onWindowClick = () => closeContextMenu();
+    window.addEventListener('click', onWindowClick);
+    return () => window.removeEventListener('click', onWindowClick);
+  }, []);
+
+  // 性能优化：缓存违规状态数据
+  const [violationStatusCache, setViolationStatusCache] = useState<Record<string, ViolationStatus | null>>({});
+  const [cacheTimestamp, setCacheTimestamp] = useState<number>(0);
+  
+  // 缓存有效期（5分钟）
+  const CACHE_DURATION = 5 * 60 * 1000;
+
+  // 计算持有周期键值（与筛选项一致）
+  const computeHoldingPeriodKey = (activationTime: string | null): string => {
+    if (!activationTime) return 'not_activated';
+    const today = dayjs();
+    const activated = dayjs(activationTime);
+    const days = today.diff(activated, 'day');
+    if (days < 1) return '1_30';
+    if (days <= 30) return '1_30';
+    if (days <= 90) return '31_90';
+    if (days <= 180) return '91_180';
+    if (days <= 365) return '181_365';
+    return '365_plus';
+  };
+
+  // 前端应用筛选
+  const applyFilters = (source: EmployeeListData[], tableFilters: any): EmployeeListData[] => {
+    if (!source || source.length === 0) return [];
+    const statusFilters: string[] | undefined = tableFilters?.status;
+    const holdingFilters: string[] | undefined = tableFilters?.holding_period;
+    const violationFilters: string[] | undefined = tableFilters?.violation_status;
+
+    return source.filter((item) => {
+      // 员工状态筛选（status）
+      if (statusFilters && statusFilters.length > 0) {
+        const value = item.status || '';
+        if (!statusFilters.includes(value)) return false;
+      }
+
+      // 持有周期筛选（基于 activation_time 推导）
+      if (holdingFilters && holdingFilters.length > 0) {
+        const key = computeHoldingPeriodKey(item.activation_time || null);
+        if (!holdingFilters.includes(key)) return false;
+      }
+
+      // 违规状态筛选（violation_status: normal|yellow|red）
+      if (violationFilters && violationFilters.length > 0) {
+        const vs = (item.violation_status as string) || 'normal';
+        if (!violationFilters.includes(vs)) return false;
+      }
+
+      return true;
+    });
+  };
+
+  // 单个员工重置违规记录（软清空）并刷新状态
+  const handleClearEmployeeViolations = async (record: EmployeeListData) => {
+    try {
+      setLoading(true);
+      await disciplinaryRecordApi.softClearEmployeeViolations(record.id);
+      await disciplinaryRecordApi.refreshEmployeeViolationStatus(record.id);
+      message.success(`已重置 ${record.employee_name} 的违规记录并刷新状态`);
+      loadData();
+    } catch (error) {
+      message.error('重置违规记录失败');
+      console.error('重置违规记录失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 批量清空所选员工违规记录（软清空）并刷新状态
+  const handleBatchClearSelectedViolations = async () => {
+    if (!selectedRowKeys.length) {
+      message.warning('请先选择员工');
+      return;
+    }
+    try {
+      setLoading(true);
+      await disciplinaryRecordApi.softClearEmployeesViolations(selectedRowKeys);
+      await Promise.all(selectedRowKeys.map(id => disciplinaryRecordApi.refreshEmployeeViolationStatus(id)));
+      message.success(`已重置所选 ${selectedRowKeys.length} 位员工的违规记录并刷新状态`);
+      setSelectedRowKeys([]);
+      loadData();
+    } catch (error) {
+      message.error('批量重置违规记录失败');
+      console.error('批量重置违规记录失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 获取状态选项
   const getStatusOptions = () => {
     const statusSet = new Set<string>();
-    data.forEach(item => {
+    (allData.length ? allData : data).forEach(item => {
       if (item.status) {
         statusSet.add(item.status);
       }
@@ -160,34 +265,68 @@ export default function EmployeeManage() {
     return options;
   };
 
-  // 加载数据
-  const loadData = async (page = 1, pageSize = 10) => {
-    setLoading(true);
-    try {
-      const result = await employeeManageApi.getEmployeeListWithViolations({ page, pageSize });
+
+
+
+
+  // 获取违规状态（带缓存）
+  const getViolationStatusesWithCache = async (employeeIds: string[]) => {
+    const now = Date.now();
+    
+    // 检查缓存是否有效
+    if (now - cacheTimestamp < CACHE_DURATION && Object.keys(violationStatusCache).length > 0) {
+      // 从缓存中获取数据
+      const cachedData: Record<string, ViolationStatus | null> = {};
+      const missingIds: string[] = [];
       
-      // 获取违规状态
-      if (result.data.length > 0) {
-        const employeeIds = result.data.map((emp: EmployeeListData) => emp.id);
-        const violationStatuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(employeeIds);
+      employeeIds.forEach(id => {
+        if (id in violationStatusCache) {
+          cachedData[id] = violationStatusCache[id];
+        } else {
+          missingIds.push(id);
+        }
+      });
+      
+      // 如果有缺失的数据，只获取缺失的部分
+      if (missingIds.length > 0) {
+        const missingStatuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(missingIds);
         
-        const dataWithViolations = result.data.map((emp: EmployeeListData) => ({
-          ...emp,
-          violation_status: violationStatuses[emp.id] || null
+        // 更新缓存
+        setViolationStatusCache(prev => ({
+          ...prev,
+          ...missingStatuses
         }));
         
-        setData(dataWithViolations);
-      } else {
-        setData([]);
+        return { ...cachedData, ...missingStatuses };
       }
       
-      // 更新分页信息
-      setPagination(prev => ({
-        ...prev,
-        current: page,
-        pageSize,
-        total: result.total
+      return cachedData;
+    } else {
+      // 缓存无效，重新获取所有数据
+      const statuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(employeeIds);
+      
+      // 更新缓存
+      setViolationStatusCache(statuses);
+      setCacheTimestamp(now);
+      
+      return statuses;
+    }
+  };
+
+  // 加载数据（加载全量后前端筛选）
+  const loadData = async () => {
+    setLoading(true);
+    
+    try {
+      const result = await employeeManageApi.getEmployeeListWithViolations();
+      const normalized: EmployeeListData[] = (result.data || []).map((emp: EmployeeListData) => ({
+        ...emp,
+        violation_status: emp.violation_status || 'normal',
       }));
+
+      setAllData(normalized);
+      const filtered = applyFilters(normalized, filteredInfo);
+      setData(filtered);
 
     } catch (error) {
       message.error('加载数据失败');
@@ -201,7 +340,7 @@ export default function EmployeeManage() {
   const handleSearch = async (value: string) => {
     setSearchText(value);
     if (!value.trim()) {
-      loadData(1, pagination.pageSize);
+      loadData();
       return;
     }
 
@@ -210,17 +349,17 @@ export default function EmployeeManage() {
       let searchResults: any;
       
       // 尝试按姓名搜索
-      searchResults = await employeeManageApi.searchEmployeeByName(value, { page: 1, pageSize: pagination.pageSize });
+      searchResults = await employeeManageApi.searchEmployeeByName(value);
       
       // 如果按姓名没找到，尝试按UID搜索
       if (searchResults.data.length === 0) {
-        searchResults = await employeeManageApi.searchEmployeeByUid(value, { page: 1, pageSize: pagination.pageSize });
+        searchResults = await employeeManageApi.searchEmployeeByUid(value);
       }
       
-      // 获取违规状态
-      if (searchResults.data.length > 0) {
+      // 获取违规状态（仅在数据量较小时）
+      if (searchResults.data.length > 0 && searchResults.data.length <= 100) {
         const employeeIds = searchResults.data.map((emp: EmployeeListData) => emp.id);
-        const violationStatuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(employeeIds);
+        const violationStatuses = await getViolationStatusesWithCache(employeeIds);
         
         const dataWithViolations = searchResults.data.map((emp: EmployeeListData) => ({
           ...emp,
@@ -229,15 +368,9 @@ export default function EmployeeManage() {
         
         setData(dataWithViolations);
       } else {
-        setData([]);
+        // 数据量较大时，直接使用搜索结果，违规状态可以延迟加载
+        setData(searchResults.data);
       }
-      
-      // 更新分页信息
-      setPagination(prev => ({
-        ...prev,
-        current: 1,
-        total: searchResults.total
-      }));
     } catch (error) {
       message.error('搜索失败');
       console.error('搜索失败:', error);
@@ -246,132 +379,18 @@ export default function EmployeeManage() {
     }
   };
 
-  // 处理表格变化（包括筛选和排序）
-  const handleTableChange = (paginationInfo: any, filters: any, sorter: any) => {
-    const { current, pageSize } = paginationInfo;
-    
-    // 更新筛选和排序信息
+  // 处理表格变化（前端筛选）
+  const handleTableChange = (_paginationInfo: any, filters: any) => {
     setFilteredInfo(filters);
-    setSortedInfo(sorter);
-    
-    if (searchText.trim()) {
-      // 如果有搜索文本，需要重新搜索但保持搜索文本
-      setSearchText(searchText);
-      setLoading(true);
-      
-      // 这里需要重新实现搜索逻辑，因为handleSearch会重置搜索文本
-      const performSearch = async () => {
-        try {
-          let searchResults: any;
-          
-          // 尝试按姓名搜索
-          searchResults = await employeeManageApi.searchEmployeeByName(searchText, { page: current, pageSize });
-          
-          // 如果按姓名没找到，尝试按UID搜索
-          if (searchResults.data.length === 0) {
-            searchResults = await employeeManageApi.searchEmployeeByUid(searchText, { page: current, pageSize });
-          }
-          
-          // 获取违规状态
-          if (searchResults.data.length > 0) {
-            const employeeIds = searchResults.data.map((emp: EmployeeListData) => emp.id);
-            const violationStatuses = await disciplinaryRecordApi.getEmployeeViolationStatuses(employeeIds);
-            
-            const dataWithViolations = searchResults.data.map((emp: EmployeeListData) => ({
-              ...emp,
-              violation_status: violationStatuses[emp.id] || null
-            }));
-            
-            setData(dataWithViolations);
-          } else {
-            setData([]);
-          }
-          
-          // 更新分页信息
-          setPagination(prev => ({
-            ...prev,
-            current,
-            pageSize,
-            total: searchResults.total
-          }));
-        } catch (error) {
-          message.error('搜索失败');
-          console.error('搜索失败:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-      performSearch();
-    } else {
-      // 否则加载普通数据
-      loadData(current, pageSize);
-    }
+    const filtered = applyFilters(allData, filters);
+    setData(filtered);
   };
 
-  // 清除所有筛选
-  const clearFilters = () => {
-    setFilteredInfo({});
-    setSortedInfo({});
-    loadData(1, pagination.pageSize);
-  };
 
-  // 清除排序
-  const clearSorters = () => {
-    setSortedInfo({});
-  };
 
-  // 获取筛选后的数据
-  const getFilteredData = () => {
-    let filteredData = [...data];
-
-    // 状态筛选
-    if (filteredInfo.status && filteredInfo.status.length > 0) {
-      filteredData = filteredData.filter(item => 
-        item.status && filteredInfo.status.includes(item.status)
-      );
-    }
-
-    // 违规状态筛选
-    if (filteredInfo.violation_status && filteredInfo.violation_status.length > 0) {
-      filteredData = filteredData.filter(item => {
-        if (!item.violation_status) {
-          return filteredInfo.violation_status.includes('normal');
-        }
-        return filteredInfo.violation_status.includes(item.violation_status.status);
-      });
-    }
-
-    // 持有周期筛选
-    if (filteredInfo.holding_period && filteredInfo.holding_period.length > 0) {
-      filteredData = filteredData.filter(item => {
-        const details = getHoldingPeriodDetails(item.activation_time);
-        const days = details.days;
-        
-        if (filteredInfo.holding_period.includes('not_activated')) {
-          return !item.activation_time;
-        }
-        if (filteredInfo.holding_period.includes('1_30')) {
-          return days >= 1 && days <= 30;
-        }
-        if (filteredInfo.holding_period.includes('31_90')) {
-          return days >= 31 && days <= 90;
-        }
-        if (filteredInfo.holding_period.includes('91_180')) {
-          return days >= 91 && days <= 180;
-        }
-        if (filteredInfo.holding_period.includes('181_365')) {
-          return days >= 181 && days <= 365;
-        }
-        if (filteredInfo.holding_period.includes('365_plus')) {
-          return days > 365;
-        }
-        
-        return false;
-      });
-    }
-
-    return filteredData;
+  // 获取当前页面数据（服务器端筛选后的数据）
+  const getCurrentPageData = () => {
+    return data;
   };
 
   // 添加/编辑员工
@@ -421,7 +440,7 @@ export default function EmployeeManage() {
       
       setModalVisible(false);
       form.resetFields();
-      loadData(1, pagination.pageSize);
+      loadData();
     } catch (error) {
       message.error('操作失败');
       console.error('保存失败:', error);
@@ -433,33 +452,18 @@ export default function EmployeeManage() {
     try {
       await employeeManageApi.deleteEmployee(id);
       message.success('删除成功');
-      loadData(1, pagination.pageSize);
+      loadData();
     } catch (error) {
       message.error('删除失败');
       console.error('删除失败:', error);
     }
   };
 
-  // 查看历史记录
-  const handleViewHistory = async (record: EmployeeListData) => {
-    setCurrentEmployee(record);
-    setHistoryModalVisible(true);
-    setHistoryLoading(true);
-    
-    try {
-      const history = await employeeOperationLogApi.getEmployeeHistoryByView(record.id);
-      setHistoryData(history);
-    } catch (error) {
-      message.error('加载历史记录失败');
-      console.error('加载历史记录失败:', error);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
+
 
   useEffect(() => {
-    loadData(1, pagination.pageSize);
-  }, [pagination.pageSize]);
+    loadData();
+  }, []);
 
   // 下载员工数据
   const handleDownloadData = () => {
@@ -526,7 +530,7 @@ export default function EmployeeManage() {
       }
       
       // 重新加载数据
-      loadData(1, pagination.pageSize);
+      loadData();
     } catch (error) {
       message.error('批量上传失败');
       console.error('批量上传失败:', error);
@@ -579,45 +583,72 @@ export default function EmployeeManage() {
     }
   };
 
-  // 表格列定义
+  // 刷新员工违规状态
+  const handleRefreshViolationStatus = async (record: EmployeeListData) => {
+    try {
+      await disciplinaryRecordApi.refreshEmployeeViolationStatus(record.id);
+      message.success('违规状态已刷新');
+      // 重新加载数据
+      loadData();
+    } catch (error) {
+      message.error('刷新违规状态失败');
+      console.error('刷新违规状态失败:', error);
+    }
+  };
+
+  // 批量刷新所有员工违规状态
+  const handleRefreshAllViolationStatus = async () => {
+    try {
+      await disciplinaryRecordApi.refreshAllEmployeesViolationStatus();
+      message.success('所有员工违规状态已刷新');
+      // 重新加载数据
+      loadData();
+    } catch (error) {
+      message.error('批量刷新违规状态失败');
+      console.error('批量刷新违规状态失败:', error);
+    }
+  };
+
+
+
+  // 表格列定义 - 根据数据库结构重新设计
   const columns = [
     {
       title: '员工姓名',
       dataIndex: 'employee_name',
       key: 'employee_name',
-      width: 150,
-      filteredValue: filteredInfo.employee_name || null,
-      onFilter: (value: any, record: EmployeeListData) => 
-        record.employee_name.toLowerCase().includes(String(value).toLowerCase()),
-      filterIcon: (filtered: boolean) => (
-        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
+      width: 120,
+      fixed: 'left' as const,
+      sorter: (a: EmployeeListData, b: EmployeeListData) => 
+        a.employee_name.localeCompare(b.employee_name),
+      render: (name: string) => (
+        <span style={{ fontWeight: 'bold' }}>{name}</span>
       ),
     },
     {
       title: '员工UID',
       dataIndex: 'employee_uid',
       key: 'employee_uid',
-      width: 150,
-      filteredValue: filteredInfo.employee_uid || null,
-      onFilter: (value: any, record: EmployeeListData) => 
-        record.employee_uid.toLowerCase().includes(String(value).toLowerCase()),
-      filterIcon: (filtered: boolean) => (
-        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
+      width: 180,
+      sorter: (a: EmployeeListData, b: EmployeeListData) => 
+        a.employee_uid.localeCompare(b.employee_uid),
+      render: (uid: string) => (
+        <code style={{ fontSize: '12px', backgroundColor: '#f5f5f5', padding: '2px 4px', borderRadius: '3px' }}>
+          {uid}
+        </code>
       ),
     },
     {
-      title: '状态',
+      title: '员工状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       filters: getStatusOptions(),
       filteredValue: filteredInfo.status || null,
-      onFilter: (value: any, record: EmployeeListData) => 
-        record.status === String(value),
       filterIcon: (filtered: boolean) => (
         <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
       ),
-      render: (status: string) => {
+      render: (status: string | null) => {
         if (!status) {
           return <Tag color="default">未设置</Tag>;
         }
@@ -640,9 +671,15 @@ export default function EmployeeManage() {
       dataIndex: 'activation_time',
       key: 'activation_time',
       width: 120,
+      sorter: (a: EmployeeListData, b: EmployeeListData) => {
+        if (!a.activation_time && !b.activation_time) return 0;
+        if (!a.activation_time) return 1;
+        if (!b.activation_time) return -1;
+        return dayjs(a.activation_time).unix() - dayjs(b.activation_time).unix();
+      },
       render: (date: string | null) => {
         if (!date) {
-          return <span style={{ color: '#999' }}>未设置</span>;
+          return <span style={{ color: '#999' }}>未开通</span>;
         }
         return dayjs(date).format('YYYY-MM-DD');
       },
@@ -654,71 +691,43 @@ export default function EmployeeManage() {
       width: 120,
       filters: getHoldingPeriodOptions(),
       filteredValue: filteredInfo.holding_period || null,
-      onFilter: (value: any, record: EmployeeListData) => {
-        const details = getHoldingPeriodDetails(record.activation_time);
-        const days = details.days;
-        
-        if (value === 'not_activated') {
-          return !record.activation_time;
-        }
-        if (value === '1_30') {
-          return days >= 1 && days <= 30;
-        }
-        if (value === '31_90') {
-          return days >= 31 && days <= 90;
-        }
-        if (value === '91_180') {
-          return days >= 91 && days <= 180;
-        }
-        if (value === '181_365') {
-          return days >= 181 && days <= 365;
-        }
-        if (value === '365_plus') {
-          return days > 365;
-        }
-        
-        return false;
-      },
-      filterIcon: (filtered: boolean) => (
-        <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
-      ),
       render: (activationTime: string | null) => {
         const details = getHoldingPeriodDetails(activationTime);
         return <Tag color={details.color}>{details.text}</Tag>;
       },
     },
-
     {
       title: '违规状态',
       dataIndex: 'violation_status',
       key: 'violation_status',
-      width: 120,
+      width: 100,
       filters: getViolationStatusOptions(),
       filteredValue: filteredInfo.violation_status || null,
-      onFilter: (value: any, record: EmployeeListData) => {
-        if (!record.violation_status) {
-          return value === 'normal';
-        }
-        return record.violation_status.status === String(value);
-      },
       filterIcon: (filtered: boolean) => (
         <FilterOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
       ),
-      render: (status: ViolationStatus | null, record: EmployeeListData) => {
-        if (!status) {
+      render: (status: string | null, record: EmployeeListData) => {
+        if (!status || status === 'normal') {
           return <Tag color="green">正常</Tag>;
         }
         
-        const displayText = getStatusDisplayText(status);
-        const color = getStatusColor(status);
+        let displayText = '正常';
+        let color = 'green';
+        
+        if (status === 'yellow') {
+          displayText = '黄牌';
+          color = 'orange';
+        } else if (status === 'red') {
+          displayText = '红牌';
+          color = 'red';
+        }
         
         return (
-          <Tooltip title={`黄牌: ${status.currentYellowCards}张, 红牌: ${status.currentRedCards}张 (单击查看状态详情，双击查看违规记录)`}>
+          <Tooltip title={`违规状态: ${displayText} (单击查看详情)`}>
             <Tag 
               color={color} 
               style={{ cursor: 'pointer' }}
               onClick={() => handleViewViolationStatus(record)}
-              onDoubleClick={() => handleViewViolations(record)}
             >
               {displayText}
             </Tag>
@@ -727,48 +736,45 @@ export default function EmployeeManage() {
       },
     },
     {
+      title: '黄牌数量',
+      dataIndex: 'current_yellow_cards',
+      key: 'current_yellow_cards',
+      width: 100,
+      sorter: (a: EmployeeListData, b: EmployeeListData) => 
+        (a.current_yellow_cards || 0) - (b.current_yellow_cards || 0),
+      render: (cards: number | null) => {
+        const count = cards || 0;
+        return (
+          <Tag color={count > 0 ? 'orange' : 'default'}>
+            {count} 张
+          </Tag>
+        );
+      },
+    },
+    {
+      title: '红牌数量',
+      dataIndex: 'current_red_cards',
+      key: 'current_red_cards',
+      width: 100,
+      sorter: (a: EmployeeListData, b: EmployeeListData) => 
+        (a.current_red_cards || 0) - (b.current_red_cards || 0),
+      render: (cards: number | null) => {
+        const count = cards || 0;
+        return (
+          <Tag color={count > 0 ? 'red' : 'default'}>
+            {count} 张
+          </Tag>
+        );
+      },
+    },
+    {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 180,
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm:ss'),
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 180,
-      render: (_: any, record: EmployeeListData) => (
-        <Space size="small">
-          <Tooltip title="编辑">
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              onClick={() => handleAddEdit(record)}
-            />
-          </Tooltip>
-          <Tooltip title="历史记录">
-            <Button
-              type="text"
-              icon={<HistoryOutlined />}
-              onClick={() => handleViewHistory(record)}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="确定要删除这个员工吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Tooltip title="删除">
-              <Button
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
-              />
-            </Tooltip>
-          </Popconfirm>
-        </Space>
-      ),
+      width: 160,
+      sorter: (a: EmployeeListData, b: EmployeeListData) => 
+        dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
+      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm'),
     },
   ];
 
@@ -806,6 +812,12 @@ export default function EmployeeManage() {
                     icon: <UploadOutlined />,
                     label: '批量上传',
                     onClick: () => setUploadModalVisible(true)
+                  },
+                  {
+                    key: 'refresh_violation',
+                    icon: <ReloadOutlined />,
+                    label: '刷新违规状态',
+                    onClick: handleRefreshAllViolationStatus
                   }
                 ]
               }}
@@ -815,46 +827,103 @@ export default function EmployeeManage() {
                 数据操作 <DownOutlined />
               </Button>
             </Dropdown>
+            <Popconfirm
+              title={`确定要重置所选 ${selectedRowKeys.length} 位员工的全部违规记录吗？`}
+              okText="确定"
+              cancelText="取消"
+              onConfirm={handleBatchClearSelectedViolations}
+              disabled={selectedRowKeys.length === 0}
+            >
+              <Button danger disabled={selectedRowKeys.length === 0} icon={<StopOutlined />}>重置违规</Button>
+            </Popconfirm>
           </Space>
         }
       >
-        {/* 筛选控制区域 */}
-        {(Object.keys(filteredInfo).length > 0 || Object.keys(sortedInfo).length > 0) && (
-          <div style={{ marginBottom: 16 }}>
-            <Space>
-              <span style={{ color: '#666' }}>当前筛选:</span>
-              {Object.keys(filteredInfo).length > 0 && (
-                <Button size="small" onClick={clearFilters}>
-                  清除筛选
-                </Button>
-              )}
-              {Object.keys(sortedInfo).length > 0 && (
-                <Button size="small" onClick={clearSorters}>
-                  清除排序
-                </Button>
-              )}
-            </Space>
-          </div>
-        )}
+
+
+
         
+
+
         <Table
           columns={columns}
-          dataSource={getFilteredData()}
+          dataSource={getCurrentPageData()}
           rowKey="id"
           loading={loading}
           size="small"
-          pagination={{
-            ...pagination,
-            total: getFilteredData().length,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total: number, range: [number, number]) => 
-              `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-          }}
+          pagination={false}
           onChange={handleTableChange}
-          scroll={{ x: 1220 }}
+          scroll={{ x: 1400 }}
+          rowSelection={{ selectedRowKeys, onChange: onSelectChange }}
+          onRow={(record) => ({
+            onContextMenu: (e) => {
+              e.preventDefault();
+              setContextMenu({ visible: true, x: e.clientX, y: e.clientY, record });
+            }
+          })}
         />
       </Card>
+
+      {contextMenu.visible && contextMenu.record && (
+        <div
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x,
+            zIndex: 1000,
+            background: '#fff',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
+            borderRadius: 4,
+            overflow: 'hidden',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Menu
+            selectable={false}
+            onClick={({ key }) => {
+              const record = contextMenu.record!;
+              closeContextMenu();
+              switch (key) {
+                case 'edit':
+                  handleAddEdit(record);
+                  break;
+                case 'violations':
+                  handleViewViolations(record);
+                  break;
+                case 'refresh':
+                  handleRefreshViolationStatus(record);
+                  break;
+                case 'clear':
+                  Modal.confirm({
+                    title: `重置【${record.employee_name}】的全部违规记录？`,
+                    okText: '确定',
+                    cancelText: '取消',
+                    okButtonProps: { danger: true },
+                    onOk: () => handleClearEmployeeViolations(record),
+                  });
+                  break;
+                case 'delete':
+                  Modal.confirm({
+                    title: `删除员工【${record.employee_name}】？`,
+                    okText: '确定',
+                    cancelText: '取消',
+                    okButtonProps: { danger: true },
+                    onOk: () => handleDelete(record.id),
+                  });
+                  break;
+              }
+            }}
+            items={[
+              { key: 'edit', icon: <EditOutlined />, label: '编辑' },
+              { key: 'violations', icon: <HistoryOutlined />, label: '违规记录' },
+              { key: 'refresh', icon: <ReloadOutlined />, label: '刷新违规状态' },
+              { type: 'divider' as const },
+              { key: 'clear', icon: <StopOutlined />, label: '重置违规记录', danger: true },
+              { key: 'delete', icon: <DeleteOutlined />, label: '删除员工', danger: true },
+            ]}
+          />
+        </div>
+      )}
 
       {/* 添加/编辑模态框 */}
       <Modal
@@ -927,81 +996,7 @@ export default function EmployeeManage() {
         </Form>
       </Modal>
 
-      {/* 历史记录模态框 */}
-      <Modal
-        title={`${currentEmployee?.employee_name || '员工'} - 操作历史`}
-        open={historyModalVisible}
-        onCancel={() => {
-          setHistoryModalVisible(false);
-          setHistoryData([]);
-          setCurrentEmployee(null);
-        }}
-        footer={null}
-        width={800}
-      >
-        <div style={{ maxHeight: '500px', overflow: 'auto', paddingTop: '16px' }}>
-          {historyLoading ? (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <Spin size="large" />
-            </div>
-          ) : historyData.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-              暂无操作历史
-            </div>
-          ) : (
-            <Timeline>
-              {historyData.map((log) => (
-                <Timeline.Item
-                  key={log.id}
-                  color={
-                    log.operation_type === 'create' ? 'green' :
-                    log.operation_type === 'update' ? 'blue' :
-                    log.operation_type === 'delete' ? 'red' : 'gray'
-                  }
-                >
-                  <div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                      {log.operation_description}
-                    </div>
-                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '8px' }}>
-                      {dayjs(log.created_at).format('YYYY-MM-DD HH:mm:ss')}
-                      {log.operator_name && ` · 操作人: ${log.operator_name}`}
-                    </div>
-                    {log.old_data && (
-                      <div style={{ marginBottom: '8px' }}>
-                        <div style={{ fontWeight: 'bold', color: '#d32f2f' }}>修改前:</div>
-                        <pre style={{ 
-                          background: '#f5f5f5', 
-                          padding: '8px', 
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          margin: '4px 0'
-                        }}>
-                          {JSON.stringify(log.old_data, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                    {log.new_data && (
-                      <div>
-                        <div style={{ fontWeight: 'bold', color: '#2e7d32' }}>修改后:</div>
-                        <pre style={{ 
-                          background: '#f5f5f5', 
-                          padding: '8px', 
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          margin: '4px 0'
-                        }}>
-                          {JSON.stringify(log.new_data, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                </Timeline.Item>
-              ))}
-            </Timeline>
-          )}
-        </div>
-      </Modal>
+
 
       {/* 批量上传模态框 */}
       <Modal
@@ -1326,7 +1321,6 @@ export default function EmployeeManage() {
                   <div>
                     <div>黄牌: {violationStatusData.currentYellowCards}张</div>
                     <div>红牌: {violationStatusData.currentRedCards}张</div>
-                    <div>总违规: {violationStatusData.totalViolations}次</div>
                     {violationStatusData.status === 'yellow' && (
                       <div style={{ color: '#faad14', fontSize: '12px' }}>
                         还需{getYellowCardsToRedCard(violationStatusData.currentYellowCards)}张黄牌升级为红牌
@@ -1341,35 +1335,14 @@ export default function EmployeeManage() {
                 </div>
               </Card>
 
-              {/* 状态历史 */}
-              <Card size="small" title="状态变化历史">
-                {violationStatusData.statusHistory.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                    暂无状态变化记录
-                  </div>
-                ) : (
-                  <Timeline>
-                    {violationStatusData.statusHistory.map((change, index) => (
-                      <Timeline.Item
-                        key={index}
-                        color={
-                          change.changeType === 'violation' ? 'orange' :
-                          change.changeType === 'recovery' ? 'green' :
-                          change.changeType === 'escalation' ? 'red' : 'gray'
-                        }
-                      >
-                        <div>
-                          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                            {change.reason}
-                          </div>
-                          <div style={{ color: '#666', fontSize: '12px' }}>
-                            第{change.week}周 · {change.timestamp}
-                          </div>
-                        </div>
-                      </Timeline.Item>
-                    ))}
-                  </Timeline>
-                )}
+              {/* 状态说明 */}
+              <Card size="small" title="状态说明">
+                <div style={{ padding: '16px', color: '#666' }}>
+                  <p><strong>黄牌规则：</strong>每次违规获得1张黄牌，每周无违规可恢复1张黄牌</p>
+                  <p><strong>红牌规则：</strong>2张黄牌升级为1张红牌，红牌不会自动恢复</p>
+                  <p><strong>状态优先级：</strong>红牌 {'>'} 黄牌 {'>'} 正常</p>
+                  <p><strong>注意：</strong>违规状态由数据库自动计算，添加违规记录时会自动更新</p>
+                </div>
               </Card>
             </div>
           )}
@@ -1378,10 +1351,3 @@ export default function EmployeeManage() {
     </div>
   );
 } 
-
-// 分页功能修复说明：
-// 1. 修改了 employeeManageApi.ts 中的所有查询方法，添加了分页支持
-// 2. 在 EmployeeManage 组件中添加了分页状态管理
-// 3. 实现了 handleTableChange 函数来处理分页变化
-// 4. 更新了 loadData 和 handleSearch 函数以支持分页
-// 5. 确保所有数据操作（增删改）后都会重新加载当前页数据 

@@ -5,17 +5,13 @@ import isoWeek from 'dayjs/plugin/isoWeek';
 dayjs.extend(weekOfYear);
 dayjs.extend(isoWeek);
 
-// 违规状态类型
+// 违规状态类型（简化版，与数据库字段对应）
 export interface ViolationStatus {
   employeeId: string;
   employeeName: string;
   currentYellowCards: number; // 当前黄牌数量
-  currentRedCards: number;    // 当前红牌数量（通过计算得出）
-  totalViolations: number;    // 总违规次数
+  currentRedCards: number;    // 当前红牌数量
   status: 'normal' | 'yellow' | 'red'; // 当前状态
-  lastViolationWeek?: string; // 最后违规周
-  lastRecoveryWeek?: string;  // 最后恢复周
-  statusHistory: ViolationStatusChange[];
 }
 
 // 违规状态变化记录
@@ -39,10 +35,9 @@ export interface ViolationRecord {
 }
 
 /**
- * 计算员工的违规状态
- * 注意：违规记录表中只存储黄牌记录，红牌通过计算得出
+ * 计算员工的违规状态（已废弃，现在直接从数据库获取）
+ * 保留此函数用于向后兼容
  * @param violations 员工的违规记录（都是黄牌）
- * @param currentWeek 当前周（可选，默认为当前周）
  * @returns 违规状态
  */
 export function calculateViolationStatus(
@@ -126,11 +121,7 @@ export function calculateViolationStatus(
     employeeName: violations[0]?.employeeName || '',
     currentYellowCards: yellowCards,
     currentRedCards: redCards,
-    totalViolations: violations.length,
-    status,
-    lastViolationWeek,
-    lastRecoveryWeek,
-    statusHistory
+    status
   };
 }
 

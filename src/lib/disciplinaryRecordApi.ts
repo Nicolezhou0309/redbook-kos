@@ -1,14 +1,28 @@
 import { supabase } from './supabase';
 import type { DisciplinaryRecord, DisciplinaryRecordForm } from '../types/employee';
-import { calculateViolationStatus, type ViolationStatus, type ViolationRecord } from '../utils/violationStatusUtils';
+
+// 简化的违规状态类型（直接从数据库获取）
+export interface ViolationStatus {
+  employeeId: string;
+  employeeName: string;
+  currentYellowCards: number;
+  currentRedCards: number;
+  status: 'normal' | 'yellow' | 'red';
+}
+
+// 扩展的违规记录类型，包含生效状态
+export interface DisciplinaryRecordWithEffective extends DisciplinaryRecord {
+  is_effective?: boolean;
+}
 
 export const disciplinaryRecordApi = {
-  // 获取所有违规记录
+  // 获取所有违规记录（只获取生效的记录）
   async getAllDisciplinaryRecords(): Promise<DisciplinaryRecord[]> {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
         .select('*')
+        .eq('is_effective', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -22,13 +36,33 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 根据员工姓名获取违规记录
+  // 获取所有违规记录（包括生效和失效的记录）
+  async getAllDisciplinaryRecordsWithEffective(): Promise<DisciplinaryRecordWithEffective[]> {
+    try {
+      const { data, error } = await supabase
+        .from('disciplinary_record')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('获取所有违规记录失败:', error);
+      throw error;
+    }
+  },
+
+  // 根据员工姓名获取违规记录（只获取生效的记录）
   async getDisciplinaryRecordsByEmployeeName(employeeName: string): Promise<DisciplinaryRecord[]> {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
         .select('*')
         .ilike('employee_name', `%${employeeName}%`)
+        .eq('is_effective', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -42,7 +76,7 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 根据时间范围获取违规记录
+  // 根据时间范围获取违规记录（只获取生效的记录）
   async getDisciplinaryRecordsByTimeRange(startDate: string, endDate: string): Promise<DisciplinaryRecord[]> {
     try {
       const { data, error } = await supabase
@@ -50,6 +84,7 @@ export const disciplinaryRecordApi = {
         .select('*')
         .gte('created_at', `${startDate}T00:00:00`)
         .lte('created_at', `${endDate}T23:59:59`)
+        .eq('is_effective', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -63,13 +98,14 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 根据来源类型获取违规记录
+  // 根据来源类型获取违规记录（只获取生效的记录）
   async getDisciplinaryRecordsBySourceType(sourceType: string): Promise<DisciplinaryRecord[]> {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
         .select('*')
         .eq('source_type', sourceType)
+        .eq('is_effective', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -83,13 +119,14 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 根据来源表名获取违规记录
+  // 根据来源表名获取违规记录（只获取生效的记录）
   async getDisciplinaryRecordsBySourceTable(sourceTable: string): Promise<DisciplinaryRecord[]> {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
         .select('*')
         .eq('source_table', sourceTable)
+        .eq('is_effective', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -103,13 +140,14 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 根据员工ID获取违规记录
+  // 根据员工ID获取违规记录（只获取生效的记录）
   async getDisciplinaryRecordsByEmployeeId(employeeId: string): Promise<DisciplinaryRecord[]> {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
         .select('*')
         .eq('employee_id', employeeId)
+        .eq('is_effective', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -123,13 +161,34 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 获取员工违规数量
+  // 根据员工ID获取所有违规记录（包括生效和失效的记录）
+  async getAllDisciplinaryRecordsByEmployeeId(employeeId: string): Promise<DisciplinaryRecordWithEffective[]> {
+    try {
+      const { data, error } = await supabase
+        .from('disciplinary_record')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('获取员工所有违规记录失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取员工违规数量（只计算生效的记录）
   async getEmployeeViolationCount(employeeId: string): Promise<number> {
     try {
       const { count, error } = await supabase
         .from('disciplinary_record')
         .select('*', { count: 'exact', head: true })
-        .eq('employee_id', employeeId);
+        .eq('employee_id', employeeId)
+        .eq('is_effective', true);
 
       if (error) {
         throw error;
@@ -142,13 +201,14 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 批量获取员工违规数量
+  // 批量获取员工违规数量（只计算生效的记录）
   async getEmployeeViolationCounts(employeeIds: string[]): Promise<Record<string, number>> {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
         .select('employee_id')
-        .in('employee_id', employeeIds);
+        .in('employee_id', employeeIds)
+        .eq('is_effective', true);
 
       if (error) {
         throw error;
@@ -178,7 +238,7 @@ export const disciplinaryRecordApi = {
     try {
       const { data: newRecord, error } = await supabase
         .from('disciplinary_record')
-        .insert([data])
+        .insert([{ ...data, is_effective: data.is_effective ?? true }])
         .select()
         .single();
 
@@ -231,13 +291,14 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 根据类型获取违规记录
+  // 根据类型获取违规记录（只获取生效的记录）
   async getDisciplinaryRecordsByType(type: string): Promise<DisciplinaryRecord[]> {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
         .select('*')
         .eq('type', type)
+        .eq('is_effective', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -254,9 +315,10 @@ export const disciplinaryRecordApi = {
   // 批量创建违规记录
   async batchCreateDisciplinaryRecords(records: DisciplinaryRecordForm[]): Promise<DisciplinaryRecord[]> {
     try {
+      const recordsWithEffective = records.map(record => ({ ...record, is_effective: record.is_effective ?? true }));
       const { data, error } = await supabase
         .from('disciplinary_record')
-        .insert(records)
+        .insert(recordsWithEffective)
         .select();
 
       if (error) {
@@ -270,7 +332,62 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 获取统计信息
+  // 设置违规记录生效状态
+  async setDisciplinaryRecordEffective(recordId: string, isEffective: boolean): Promise<void> {
+    try {
+      const { error } = await supabase
+        .rpc('set_disciplinary_record_effective', {
+          p_record_id: recordId,
+          p_is_effective: isEffective
+        });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('设置违规记录生效状态失败:', error);
+      throw error;
+    }
+  },
+
+  // 批量设置违规记录生效状态
+  async batchSetDisciplinaryRecordsEffective(recordIds: string[], isEffective: boolean): Promise<void> {
+    try {
+      const { error } = await supabase
+        .rpc('batch_set_disciplinary_records_effective', {
+          p_record_ids: recordIds,
+          p_is_effective: isEffective
+        });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('批量设置违规记录生效状态失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取生效违规记录数量
+  async getEffectiveViolationCount(employeeId: string): Promise<number> {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_effective_violation_count', {
+          p_employee_id: employeeId
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      return data || 0;
+    } catch (error) {
+      console.error('获取生效违规记录数量失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取统计信息（只统计生效的记录）
   async getStatistics(): Promise<{
     totalRecords: number;
     employeeCount: number;
@@ -280,7 +397,8 @@ export const disciplinaryRecordApi = {
     try {
       const { data, error } = await supabase
         .from('disciplinary_record')
-        .select('*');
+        .select('*')
+        .eq('is_effective', true);
 
       if (error) {
         throw error;
@@ -318,55 +436,138 @@ export const disciplinaryRecordApi = {
     }
   },
 
-  // 获取员工违规状态
+  // 获取员工违规状态（从数据库直接获取）
   async getEmployeeViolationStatus(employeeId: string): Promise<ViolationStatus | null> {
     try {
-      // 获取员工的所有违规记录
-      const violations = await this.getDisciplinaryRecordsByEmployeeId(employeeId);
-      
-      if (violations.length === 0) {
+      const { data, error } = await supabase
+        .from('employee_list')
+        .select('id, employee_name, current_yellow_cards, current_red_cards, violation_status')
+        .eq('id', employeeId)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data) {
         return null;
       }
-      
-      // 转换为ViolationRecord格式
-      const violationRecords: ViolationRecord[] = violations.map(v => ({
-        id: v.id,
-        employeeId: v.employee_id || '',
-        employeeName: v.employee_name,
-        type: v.type || '',
-        reason: v.reason,
-        created_at: v.created_at,
-        week: '' // 将在calculateViolationStatus中计算
-      }));
-      
-      // 计算违规状态
-      return calculateViolationStatus(violationRecords);
+
+      return {
+        employeeId: data.id,
+        employeeName: data.employee_name,
+        currentYellowCards: data.current_yellow_cards || 0,
+        currentRedCards: data.current_red_cards || 0,
+        status: data.violation_status || 'normal'
+      };
     } catch (error) {
       console.error('获取员工违规状态失败:', error);
       throw error;
     }
   },
 
-  // 批量获取员工违规状态
+  // 批量获取员工违规状态（从数据库直接获取）
   async getEmployeeViolationStatuses(employeeIds: string[]): Promise<Record<string, ViolationStatus | null>> {
     try {
+      const { data, error } = await supabase
+        .from('employee_list')
+        .select('id, employee_name, current_yellow_cards, current_red_cards, violation_status')
+        .in('id', employeeIds);
+
+      if (error) {
+        throw error;
+      }
+
       const statuses: Record<string, ViolationStatus | null> = {};
       
-      // 并行获取每个员工的违规状态
-      const promises = employeeIds.map(async (employeeId) => {
-        try {
-          const status = await this.getEmployeeViolationStatus(employeeId);
-          statuses[employeeId] = status;
-        } catch (error) {
-          console.error(`获取员工 ${employeeId} 违规状态失败:`, error);
-          statuses[employeeId] = null;
-        }
+      // 初始化所有员工的状态为null
+      employeeIds.forEach(id => {
+        statuses[id] = null;
       });
-      
-      await Promise.all(promises);
+
+      // 填充有数据的员工状态
+      data?.forEach(employee => {
+        statuses[employee.id] = {
+          employeeId: employee.id,
+          employeeName: employee.employee_name,
+          currentYellowCards: employee.current_yellow_cards || 0,
+          currentRedCards: employee.current_red_cards || 0,
+          status: employee.violation_status || 'normal'
+        };
+      });
+
       return statuses;
     } catch (error) {
       console.error('批量获取员工违规状态失败:', error);
+      throw error;
+    }
+  },
+
+  // 手动刷新员工违规状态
+  async refreshEmployeeViolationStatus(employeeId: string): Promise<ViolationStatus | null> {
+    try {
+      const { data, error } = await supabase
+        .rpc('refresh_employee_violation_status', { p_employee_id: employeeId });
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('刷新员工违规状态失败:', error);
+      throw error;
+    }
+  },
+
+  // 批量刷新所有员工违规状态
+  async refreshAllEmployeesViolationStatus(): Promise<void> {
+    try {
+      const { error } = await supabase
+        .rpc('refresh_all_employees_violation_status');
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('批量刷新员工违规状态失败:', error);
+      throw error;
+    }
+  },
+
+  // 软清空：将某员工的所有生效违规记录置为无效
+  async softClearEmployeeViolations(employeeId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('disciplinary_record')
+        .update({ is_effective: false })
+        .eq('employee_id', employeeId)
+        .eq('is_effective', true);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('软清空员工违规记录失败:', error);
+      throw error;
+    }
+  },
+
+  // 软清空：将多个员工的所有生效违规记录置为无效
+  async softClearEmployeesViolations(employeeIds: string[]): Promise<void> {
+    if (!employeeIds || employeeIds.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from('disciplinary_record')
+        .update({ is_effective: false })
+        .in('employee_id', employeeIds)
+        .eq('is_effective', true);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('批量软清空员工违规记录失败:', error);
       throw error;
     }
   },
@@ -410,28 +611,98 @@ export const disciplinaryRecordApi = {
     statuses: Record<string, ViolationStatus | null>;
   }> {
     try {
-      // 获取所有有违规记录的员工ID
-      const { data: violations, error } = await supabase
-        .from('disciplinary_record')
-        .select('employee_id')
-        .not('employee_id', 'is', null);
+      // 获取所有员工的状态
+      const { data, error } = await supabase
+        .from('employee_list')
+        .select('id, employee_name, current_yellow_cards, current_red_cards, violation_status');
 
       if (error) {
         throw error;
       }
 
-      // 获取唯一的员工ID
-      const employeeIds = [...new Set(violations?.map(v => v.employee_id).filter(Boolean) || [])];
-      
-      // 获取所有员工的违规状态
-      const statuses = await this.getEmployeeViolationStatuses(employeeIds);
+      const employees = data || [];
+      const statuses: Record<string, ViolationStatus | null> = {};
       
       // 统计各状态数量
       let normalCount = 0;
       let yellowCount = 0;
       let redCount = 0;
       
-      Object.values(statuses).forEach(status => {
+      employees.forEach(employee => {
+        const status: ViolationStatus = {
+          employeeId: employee.id,
+          employeeName: employee.employee_name,
+          currentYellowCards: employee.current_yellow_cards || 0,
+          currentRedCards: employee.current_red_cards || 0,
+          status: employee.violation_status || 'normal'
+        };
+        
+        statuses[employee.id] = status;
+        
+        switch (status.status) {
+          case 'normal':
+            normalCount++;
+            break;
+          case 'yellow':
+            yellowCount++;
+            break;
+          case 'red':
+            redCount++;
+            break;
+        }
+      });
+      
+      return {
+        totalEmployees: employees.length,
+        normalCount,
+        yellowCount,
+        redCount,
+        statuses
+      };
+    } catch (error) {
+      console.error('获取所有员工违规状态概览失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取所有员工的违规状态统计（重命名避免重复）
+  async getAllEmployeeViolationStatusesWithStats(): Promise<{
+    totalEmployees: number;
+    normalCount: number;
+    yellowCount: number;
+    redCount: number;
+    statuses: Record<string, ViolationStatus | null>;
+  }> {
+    try {
+      // 首先获取所有员工
+      const { data: employees, error: employeesError } = await supabase
+        .from('employee_list')
+        .select('id, employee_name');
+
+      if (employeesError) {
+        throw employeesError;
+      }
+
+      if (!employees || employees.length === 0) {
+        return {
+          totalEmployees: 0,
+          normalCount: 0,
+          yellowCount: 0,
+          redCount: 0,
+          statuses: {}
+        };
+      }
+
+      // 获取所有员工的违规状态
+      const employeeIds = employees.map(emp => emp.id);
+      const statuses = await this.getEmployeeViolationStatuses(employeeIds);
+
+      // 统计各状态数量
+      let normalCount = 0;
+      let yellowCount = 0;
+      let redCount = 0;
+
+      Object.values(statuses).forEach((status: ViolationStatus | null) => {
         if (status) {
           switch (status.status) {
             case 'normal':
@@ -444,23 +715,365 @@ export const disciplinaryRecordApi = {
               redCount++;
               break;
           }
+        } else {
+          normalCount++; // 没有违规状态记录视为正常
         }
       });
-      
+
       return {
-        totalEmployees: employeeIds.length,
+        totalEmployees: employees.length,
         normalCount,
         yellowCount,
         redCount,
         statuses
       };
     } catch (error) {
-      console.error('获取所有员工违规状态概览失败:', error);
+      console.error('获取所有员工违规状态失败:', error);
       throw error;
     }
   },
 
-  // 获取本周违规统计
+  // 根据违规状态筛选员工（带分页）
+  async getEmployeesByViolationStatus(status: 'normal' | 'yellow' | 'red', params?: { page: number; pageSize: number }): Promise<{
+    data: Array<{ id: string; employee_name: string; employee_uid: string; violation_status: ViolationStatus | null }>;
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    try {
+      // 如果没有提供分页参数，返回所有数据
+      if (!params) {
+        // 首先获取所有员工
+        const { data: employees, error: employeesError } = await supabase
+          .from('employee_list')
+          .select('id, employee_name, employee_uid')
+          .order('created_at', { ascending: false });
+
+        if (employeesError) {
+          throw employeesError;
+        }
+
+        if (!employees || employees.length === 0) {
+          return {
+            data: [],
+            total: 0,
+            page: 1,
+            pageSize: employees.length
+          };
+        }
+
+        // 获取所有员工的违规状态
+        const employeeIds = employees.map(emp => emp.id);
+        const statuses = await this.getEmployeeViolationStatuses(employeeIds);
+
+        // 根据违规状态筛选员工
+        const filteredEmployees = employees.filter(emp => {
+          const violationStatus = statuses[emp.id];
+          if (status === 'normal') {
+            return !violationStatus || violationStatus.status === 'normal';
+          } else {
+            return violationStatus && violationStatus.status === status;
+          }
+        });
+
+        // 为筛选后的员工添加违规状态信息
+        const dataWithViolations = filteredEmployees.map(emp => ({
+          ...emp,
+          violation_status: statuses[emp.id] || null
+        }));
+
+        return {
+          data: dataWithViolations,
+          total: filteredEmployees.length,
+          page: 1,
+          pageSize: filteredEmployees.length
+        };
+      } else {
+        // 使用分页参数的情况
+        const page = params.page || 1;
+        const pageSize = params.pageSize || 10;
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+
+        // 首先获取所有员工
+        const { data: employees, error: employeesError } = await supabase
+          .from('employee_list')
+          .select('id, employee_name, employee_uid')
+          .order('created_at', { ascending: false });
+
+        if (employeesError) {
+          throw employeesError;
+        }
+
+        if (!employees || employees.length === 0) {
+          return {
+            data: [],
+            total: 0,
+            page,
+            pageSize
+          };
+        }
+
+        // 获取所有员工的违规状态
+        const employeeIds = employees.map(emp => emp.id);
+        const statuses = await this.getEmployeeViolationStatuses(employeeIds);
+
+        // 根据违规状态筛选员工
+        const filteredEmployees = employees.filter(emp => {
+          const violationStatus = statuses[emp.id];
+          if (status === 'normal') {
+            return !violationStatus || violationStatus.status === 'normal';
+          } else {
+            return violationStatus && violationStatus.status === status;
+          }
+        });
+
+        // 应用分页
+        const paginatedEmployees = filteredEmployees.slice(from, to);
+
+        // 为分页后的员工添加违规状态信息
+        const dataWithViolations = paginatedEmployees.map(emp => ({
+          ...emp,
+          violation_status: statuses[emp.id] || null
+        }));
+
+        return {
+          data: dataWithViolations,
+          total: filteredEmployees.length,
+          page,
+          pageSize
+        };
+      }
+    } catch (error) {
+      console.error('根据违规状态筛选员工失败:', error);
+      throw error;
+    }
+  },
+
+  // 根据多个违规状态筛选员工（支持多选，带分页）
+  async getEmployeesByMultipleViolationStatuses(statuses: ('normal' | 'yellow' | 'red')[], params?: { page: number; pageSize: number }): Promise<{
+    data: Array<{ id: string; employee_name: string; employee_uid: string; violation_status: ViolationStatus | null }>;
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    try {
+      // 如果没有提供分页参数，返回所有数据
+      if (!params) {
+        // 首先获取所有员工
+        const { data: employees, error: employeesError } = await supabase
+          .from('employee_list')
+          .select('id, employee_name, employee_uid')
+          .order('created_at', { ascending: false });
+
+        if (employeesError) {
+          throw employeesError;
+        }
+
+        if (!employees || employees.length === 0) {
+          return {
+            data: [],
+            total: 0,
+            page: 1,
+            pageSize: employees.length
+          };
+        }
+
+        // 获取所有员工的违规状态
+        const employeeIds = employees.map(emp => emp.id);
+        const violationStatuses = await this.getEmployeeViolationStatuses(employeeIds);
+
+        // 根据多个违规状态筛选员工
+        const filteredEmployees = employees.filter(emp => {
+          const violationStatus = violationStatuses[emp.id];
+          const currentStatus = violationStatus ? violationStatus.status : 'normal';
+          return statuses.includes(currentStatus);
+        });
+
+        // 为筛选后的员工添加违规状态信息
+        const dataWithViolations = filteredEmployees.map(emp => ({
+          ...emp,
+          violation_status: violationStatuses[emp.id] || null
+        }));
+
+        return {
+          data: dataWithViolations,
+          total: filteredEmployees.length,
+          page: 1,
+          pageSize: filteredEmployees.length
+        };
+      } else {
+        // 使用分页参数的情况
+        const page = params.page || 1;
+        const pageSize = params.pageSize || 10;
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+
+        // 首先获取所有员工
+        const { data: employees, error: employeesError } = await supabase
+          .from('employee_list')
+          .select('id, employee_name, employee_uid')
+          .order('created_at', { ascending: false });
+
+        if (employeesError) {
+          throw employeesError;
+        }
+
+        if (!employees || employees.length === 0) {
+          return {
+            data: [],
+            total: 0,
+            page,
+            pageSize
+          };
+        }
+
+        // 获取所有员工的违规状态
+        const employeeIds = employees.map(emp => emp.id);
+        const violationStatuses = await this.getEmployeeViolationStatuses(employeeIds);
+
+        // 根据多个违规状态筛选员工
+        const filteredEmployees = employees.filter(emp => {
+          const violationStatus = violationStatuses[emp.id];
+          const currentStatus = violationStatus ? violationStatus.status : 'normal';
+          return statuses.includes(currentStatus);
+        });
+
+        // 应用分页
+        const paginatedEmployees = filteredEmployees.slice(from, to);
+
+        // 为分页后的员工添加违规状态信息
+        const dataWithViolations = paginatedEmployees.map(emp => ({
+          ...emp,
+          violation_status: violationStatuses[emp.id] || null
+        }));
+
+        return {
+          data: dataWithViolations,
+          total: filteredEmployees.length,
+          page,
+          pageSize
+        };
+      }
+    } catch (error) {
+      console.error('根据多个违规状态筛选员工失败:', error);
+      throw error;
+    }
+  },
+
+  // 根据违规状态和持有周期组合筛选员工（带分页）
+  async getEmployeesByViolationStatusAndHoldingPeriod(
+    violationStatus: 'normal' | 'yellow' | 'red',
+    holdingPeriod: string,
+    params?: { page: number; pageSize: number }
+  ): Promise<{
+    data: Array<{ id: string; employee_name: string; employee_uid: string; violation_status: ViolationStatus | null }>;
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    try {
+      const page = params?.page || 1;
+      const pageSize = params?.pageSize || 10;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      // 首先根据持有周期筛选员工
+      let query = supabase.from('employee_list').select('id, employee_name, employee_uid, activation_time');
+
+      // 根据持有周期类型筛选
+      switch (holdingPeriod) {
+        case 'not_activated':
+          query = query.is('activation_time', null);
+          break;
+        case '1_30':
+          query = query
+            .not('activation_time', 'is', null)
+            .gte('activation_time', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .lte('activation_time', new Date().toISOString().split('T')[0]);
+          break;
+        case '31_90':
+          query = query
+            .not('activation_time', 'is', null)
+            .gte('activation_time', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .lt('activation_time', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          break;
+        case '91_180':
+          query = query
+            .not('activation_time', 'is', null)
+            .gte('activation_time', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .lt('activation_time', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          break;
+        case '181_365':
+          query = query
+            .not('activation_time', 'is', null)
+            .gte('activation_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .lt('activation_time', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          break;
+        case '365_plus':
+          query = query
+            .not('activation_time', 'is', null)
+            .lt('activation_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          break;
+        default:
+          throw new Error('无效的持有周期类型');
+      }
+
+      const { data: employees, error: employeesError } = await query.order('created_at', { ascending: false });
+
+      if (employeesError) {
+        throw employeesError;
+      }
+
+      if (!employees || employees.length === 0) {
+        return {
+          data: [],
+          total: 0,
+          page,
+          pageSize
+        };
+      }
+
+      // 获取这些员工的违规状态
+      const employeeIds = employees.map(emp => emp.id);
+      const statuses = await this.getEmployeeViolationStatuses(employeeIds);
+
+      // 根据违规状态进一步筛选
+      const filteredEmployees = employees.filter(emp => {
+        const violationStatusObj = statuses[emp.id];
+        // 如果没有违规状态对象，默认不过滤
+        if (!violationStatusObj) return true;
+        // violationStatusObj.status 可能为 'normal' | 'yellow' | 'red'
+        // 这里假设有一个变量 violationStatusFilter，表示当前筛选的违规状态
+        // 如果 violationStatusFilter 为 'normal'，只保留 status 为 'normal' 的员工
+        // 如果 violationStatusFilter 为 'yellow' 或 'red'，只保留对应状态的员工
+        // 如果 violationStatusFilter 为空或未指定，则不过滤
+        if (!violationStatus) return true;
+        return violationStatusObj.status === violationStatus;
+      });
+
+      // 应用分页
+      const paginatedEmployees = filteredEmployees.slice(from, to);
+
+      // 为分页后的员工添加违规状态信息
+      const dataWithViolations = paginatedEmployees.map(emp => ({
+        ...emp,
+        violation_status: statuses[emp.id] || null
+      }));
+
+      return {
+        data: dataWithViolations,
+        total: filteredEmployees.length,
+        page,
+        pageSize
+      };
+    } catch (error) {
+      console.error('根据违规状态和持有周期筛选员工失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取本周违规统计（只统计生效的记录）
   async getCurrentWeekViolationStats(): Promise<{
     totalViolations: number;
     newYellowCards: number;
@@ -479,7 +1092,8 @@ export const disciplinaryRecordApi = {
         .from('disciplinary_record')
         .select('*')
         .gte('created_at', weekStart.toISOString())
-        .lte('created_at', weekEnd.toISOString());
+        .lte('created_at', weekEnd.toISOString())
+        .eq('is_effective', true);
 
       if (error) {
         throw error;

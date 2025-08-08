@@ -391,6 +391,9 @@ export interface DisciplinaryRecord {
   source_file_name: string | null; // 导入文件名
   source_import_time: string | null; // 导入时间
   source_metadata: any | null; // 额外来源信息
+  
+  // 生效状态字段
+  is_effective?: boolean; // 记录是否生效，默认为true
 }
 
 export interface DisciplinaryRecordForm {
@@ -408,4 +411,7 @@ export interface DisciplinaryRecordForm {
   source_file_name?: string;
   source_import_time?: string | null;
   source_metadata?: any;
+  
+  // 生效状态字段
+  is_effective?: boolean;
 }

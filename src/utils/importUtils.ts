@@ -45,7 +45,7 @@ export const parseExcelFile = async (file: File): Promise<FileParseResult> => {
           row && row.some((cell: any) => cell !== null && cell !== undefined && cell !== '')
         );
         
-        const parsedData = filteredRows.map((row, index) => {
+        const parsedData = filteredRows.map((row, _index) => {
           const obj: any = {};
           headers.forEach((header, colIndex) => {
             obj[header] = row[colIndex] || '';
