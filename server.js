@@ -1,12 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
+import multer from 'multer';
 
 const app = express();
 const PORT = 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // 企业微信API代理
 app.get('/api/wecom/token', async (req, res) => {
@@ -44,12 +46,13 @@ app.post('/api/wecom/webhook-upload', async (req, res) => {
     }
 
     const buffer = Buffer.from(contentBase64, 'base64');
+    const form = new FormData();
+    // 注意：Node 的 FormData 需要 Blob 或 File；Node18 提供 Blob
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const formData = new FormData();
-    formData.append('media', blob, fileName);
+    form.append('media', blob, fileName);
 
     const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`;
-    const upstreamResp = await fetch(uploadUrl, { method: 'POST', body: formData });
+    const upstreamResp = await fetch(uploadUrl, { method: 'POST', body: form });
     const upstreamData = await upstreamResp.json();
     res.status(upstreamResp.status).json(upstreamData);
   } catch (error) {
