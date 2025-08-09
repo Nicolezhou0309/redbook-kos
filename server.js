@@ -37,25 +37,48 @@ app.post('/api/wecom/send', async (req, res) => {
 });
 
 // 代理企业微信群机器人：上传文件 (避免浏览器CORS)
-// 请求体: { key: string, fileName: string, contentBase64: string }
-app.post('/api/wecom/webhook-upload', async (req, res) => {
+// 支持两种方式：
+// 1) multipart/form-data: fields { key }, file field name: media
+// 2) JSON: { key, fileName, contentBase64 }
+const upload = multer();
+app.post('/api/wecom/webhook-upload', upload.single('media'), async (req, res) => {
   try {
-    const { key, fileName, contentBase64 } = req.body || {};
+    // 优先走 multipart
+    let key = req.body?.key || req.query?.key;
+    if (req.file && req.file.buffer) {
+      if (!key) return res.status(400).json({ error: 'Missing key' });
+      const buffer = req.file.buffer;
+      const filename = req.file.originalname || 'report.xlsx';
+
+      const form = new FormData();
+      const blob = new Blob([buffer], { type: req.file.mimetype || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      form.append('media', blob, filename);
+
+      const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`;
+      const upstreamResp = await fetch(uploadUrl, { method: 'POST', body: form });
+      const text = await upstreamResp.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      return res.status(upstreamResp.status).json(data);
+    }
+
+    // 兼容 JSON base64 方式
+    const { fileName, contentBase64 } = req.body || {};
     if (!key || !fileName || !contentBase64) {
       return res.status(400).json({ error: 'Missing key, fileName or contentBase64' });
     }
-
     const buffer = Buffer.from(contentBase64, 'base64');
     const form = new FormData();
-    // 注意：Node 的 FormData 需要 Blob 或 File；Node18 提供 Blob
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     form.append('media', blob, fileName);
-
     const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`;
     const upstreamResp = await fetch(uploadUrl, { method: 'POST', body: form });
-    const upstreamData = await upstreamResp.json();
-    res.status(upstreamResp.status).json(upstreamData);
+    const text = await upstreamResp.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    return res.status(upstreamResp.status).json(data);
   } catch (error) {
+    console.error('webhook-upload error:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });

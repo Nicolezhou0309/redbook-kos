@@ -575,13 +575,12 @@ const EmployeeSimpleJoin: React.FC = () => {
       // 顺序上传与发送
       let successCount = 0
       for (const f of files) {
-        // 通过API代理上传
-        const contentBase64 = btoa(String.fromCharCode(...new Uint8Array(f.arrayBuffer)))
-        const upResp = await fetch(UPLOAD_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: WEBHOOK_KEY, fileName: f.fileName, contentBase64 })
-        })
+        // 通过API代理上传（改为真正的 multipart/form-data，更稳）
+        const blob = new Blob([f.arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        const fd = new FormData()
+        fd.append('key', WEBHOOK_KEY)
+        fd.append('media', blob, f.fileName)
+        const upResp = await fetch(UPLOAD_URL, { method: 'POST', body: fd })
         if (!upResp.ok) {
           console.error('上传失败 HTTP:', upResp.status, upResp.statusText)
           continue
