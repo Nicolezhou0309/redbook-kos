@@ -4,7 +4,8 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end()
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-    const community = (req.query.community || '未匹配社区')
+    const communityRaw = String(req.query.community || '').trim()
+    const community = communityRaw // 为空表示不过滤社区
     const debug = String(req.query.debug || '').toLowerCase() === '1' || String(req.query.debug || '').toLowerCase() === 'true'
     const maxParam = parseInt(String(req.query.max || '').trim(), 10)
     const pageSizeOverride = Number.isFinite(maxParam) && maxParam > 0 ? Math.min(maxParam, 5000) : undefined
@@ -12,7 +13,16 @@ export default async function handler(req, res) {
 
     const filters = filtersB64 ? JSON.parse(Buffer.from(filtersB64, 'base64').toString('utf-8')) : {}
 
-    // debug: 直接返回一个极简 Excel
+    const safe = (s) => String(s).replace(/[\\/:*?"<>|\n\r]/g, ' ').slice(0, 80)
+    const buildFileName = (comm, filters) => {
+      const datePart = (filters && filters.start_date && filters.end_date)
+        ? `${filters.start_date}_${filters.end_date}`
+        : new Date().toISOString().slice(0, 10)
+      const nameComm = comm && comm.trim() !== '' ? safe(comm) : '全部'
+      return `员工周报_${nameComm}_${datePart}.xlsx`
+    }
+
+    // debug: 直接返回一个极简 Excel（同样使用优化后的文件名）
     if (debug) {
       const { default: ExcelJS } = await import('exceljs')
       const workbook = new ExcelJS.Workbook()
@@ -24,7 +34,7 @@ export default async function handler(req, res) {
       sheet.addRow({ user: '示例', manager: '张三' })
       const buffer = await workbook.xlsx.writeBuffer()
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      res.setHeader('Content-Disposition', `attachment; filename="weekly_debug.xlsx"`)
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileName(community, {}))}"`)
       return res.status(200).send(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
     }
 
@@ -137,7 +147,12 @@ export default async function handler(req, res) {
           '违规状态': '',
         }
       })
-      .filter((r) => r['社区'] === community)
+      // 1) 永久排除未匹配社区 2) 若指定 community，则只保留该社区
+      .filter((r) => r['社区'] && r['社区'] !== '未匹配社区' && (!community || r['社区'] === community))
+
+    if (!weeklyRows.length) {
+      return res.status(404).json({ error: '无该社区数据或均为未匹配社区，未返回记录' })
+    }
 
     // 生成 Excel
     const { default: ExcelJS } = await import('exceljs')
@@ -176,17 +191,14 @@ export default async function handler(req, res) {
     if (!persist) {
       const buffer = await workbook.xlsx.writeBuffer()
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      res.setHeader('Content-Disposition', `attachment; filename="weekly.xlsx"`)
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileName(community, filters))}"`)
       return res.status(200).send(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
     }
 
     // 上传到 Supabase Storage
     const bucket = process.env.REPORTS_BUCKET || 'weekly-reports'
     try { await supabaseSrv.storage.createBucket(bucket, { public: true }) } catch {}
-    const now = new Date()
-    const ymd = now.toISOString().slice(0, 10)
-    const safe = (s) => String(s).replace(/[\\/:*?"<>|\n\r]/g, ' ').slice(0, 80)
-    const objectName = `${safe(community)}_小红书专业号数据_${ymd}.xlsx`
+    const objectName = buildFileName(community, filters)
     const path = objectName
 
     const buffer = await workbook.xlsx.writeBuffer()
