@@ -507,7 +507,6 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 发送周报到企业微信（分社区：多链接 Markdown 消息）
   const handleSendWeeklyToWeCom = async () => {
-    const WEBHOOK_KEY = 'e9be8161-5ed4-48b2-9823-e17d896efed7'
     const SEND_URL = `/api/wecom/webhook-send`
 
     try {
@@ -1516,8 +1515,7 @@ const EmployeeSimpleJoin: React.FC = () => {
         onCancel={() => setWecomPreviewVisible(false)}
         onOk={async () => {
           if (wecomPreviewLoading) return
-          const WEBHOOK_KEY = 'e9be8161-5ed4-48b2-9823-e17d896efed7'
-          const SEND_URL = `/api/wecom/webhook-send`
+      const SEND_URL = `/api/wecom/webhook-send`
           try {
             setWecomPreviewLoading(true)
             let sent = 0
@@ -1527,7 +1525,8 @@ const EmployeeSimpleJoin: React.FC = () => {
               const sendResp = await fetch(SEND_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: WEBHOOK_KEY, msgtype: 'markdown', markdown: { content } })
+              // key 从服务端环境变量“社区员工号周报wehook”读取
+              body: JSON.stringify({ msgtype: 'markdown', markdown: { content } })
               })
               if (!sendResp.ok) continue
               const sendData = await sendResp.json()

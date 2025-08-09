@@ -14,8 +14,11 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body || {}
-    const { key, ...rest } = body
-    if (!key) return res.status(400).json({ error: 'Missing key' })
+    // 支持从环境变量读取：社区员工号周报wehook（优先环境变量，其次 body.key 兼容老用法）
+    const envKey = process.env.社区员工号周报wehook || process.env.WECOM_WEEKLY_WEBHOOK_KEY || ''
+    const { key: bodyKey, ...rest } = body
+    const key = (envKey && String(envKey).trim() !== '') ? envKey : (bodyKey || '')
+    if (!key) return res.status(400).json({ error: 'Missing key (set 环境变量“社区员工号周报wehook” 或传 key)' })
 
     const sendUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${encodeURIComponent(key)}`
     const upstreamResp = await fetch(sendUrl, {
