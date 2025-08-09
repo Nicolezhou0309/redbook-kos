@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createClient } from '@supabase/supabase-js'
 // 避免在 Vercel 顶层导入引发运行时解析问题，改为在函数中动态导入
 import dayjs from 'dayjs'
 
@@ -85,6 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!SUPABASE_URL || !SERVICE_KEY) {
       return res.status(500).json({ error: 'Missing SUPABASE_URL or service/anon key env' })
     }
+    const { createClient } = await import('@supabase/supabase-js')
     const supabaseSrv = createClient(SUPABASE_URL, SERVICE_KEY)
 
     // 拉取全量数据（直接调用 RPC，避免引用前端代码）
