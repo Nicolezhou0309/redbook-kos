@@ -5,8 +5,7 @@
   "functions": {
     "api/wecom/token.ts": { "runtime": "@vercel/node@5.3.11" },
     "api/wecom/send.ts": { "runtime": "@vercel/node@5.3.11" },
-    "api/wecom/webhook-send.ts": { "runtime": "@vercel/node@5.3.11" },
-    "api/wecom/webhook-upload.ts": { "runtime": "@vercel/node@5.3.11" }
+    "api/wecom/webhook-send.ts": { "runtime": "@vercel/node@5.3.11" }
   },
   "rewrites": [
     {
