@@ -1,49 +1,52 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import dayjs from 'dayjs'
 
-function buildWeeklyReportOneFile(
+async function buildWeeklyReportOneFile(
   weeklyRows: Array<Record<string, any>>,
   options?: { start_date?: string; end_date?: string }
-): { fileName: string; arrayBuffer: ArrayBuffer } {
-  const orderedRows = weeklyRows.map((r) => ({
-    '当前使用人': r['当前使用人'] || '',
-    '组长': r['组长'] || '',
-    '社区': r['社区'] || '',
-    '时间范围': r['时间范围'] || '',
-    '1小时回复率': r['1小时回复率'] ?? r['1小时超时率'] ?? '',
-    '留资量': r['留资量'] ?? 0,
-    '开口量': r['开口量'] ?? 0,
-    '发布量': r['发布量'] ?? 0,
-    '笔记曝光': r['笔记曝光'] ?? 0,
-    '笔记点击': r['笔记点击'] ?? 0,
-    '违规状态': r['违规状态'] || '',
-  }))
+): Promise<{ fileName: string; buffer: Buffer }> {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('周报')
 
-  const workbook = XLSX.utils.book_new()
-  const worksheet = XLSX.utils.json_to_sheet(orderedRows)
-  worksheet['!cols'] = [
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 12 },
+  // 列定义
+  sheet.columns = [
+    { header: '当前使用人', key: 'user', width: 14 },
+    { header: '组长', key: 'manager', width: 12 },
+    { header: '社区', key: 'community', width: 12 },
+    { header: '时间范围', key: 'range', width: 20 },
+    { header: '1小时回复率', key: 'oneHourRate', width: 14 },
+    { header: '留资量', key: 'leadsKept', width: 10 },
+    { header: '开口量', key: 'openings', width: 10 },
+    { header: '发布量', key: 'published', width: 10 },
+    { header: '笔记曝光', key: 'exposure', width: 12 },
+    { header: '笔记点击', key: 'clicks', width: 12 },
+    { header: '违规状态', key: 'violation', width: 12 },
   ]
-  XLSX.utils.book_append_sheet(workbook, worksheet, '周报')
+
+  for (const r of weeklyRows) {
+    sheet.addRow({
+      user: r['当前使用人'] || '',
+      manager: r['组长'] || '',
+      community: r['社区'] || '',
+      range: r['时间范围'] || '',
+      oneHourRate: r['1小时回复率'] ?? r['1小时超时率'] ?? '',
+      leadsKept: r['留资量'] ?? 0,
+      openings: r['开口量'] ?? 0,
+      published: r['发布量'] ?? 0,
+      exposure: r['笔记曝光'] ?? 0,
+      clicks: r['笔记点击'] ?? 0,
+      violation: r['违规状态'] || '',
+    })
+  }
 
   let fileName = `员工周报_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`
   if (options?.start_date && options?.end_date) fileName += `_${options.start_date}_${options.end_date}`
   fileName += '.xlsx'
 
-  const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-  return { fileName, arrayBuffer }
+  const buffer = await workbook.xlsx.writeBuffer()
+  return { fileName, buffer: Buffer.isBuffer(buffer) ? (buffer as Buffer) : Buffer.from(buffer) }
 }
 
 // 注意：此函数直接调用前端代码会引入浏览器依赖，严格生产建议复制所需逻辑到此处。
@@ -188,13 +191,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 为保持进度，这里简单用 xlsx 组合，但通过已有的打包函数转为 arrayBuffer 再返回 attachment 更稳。
 
     // 生成文件（仅该社区）
-    const target = buildWeeklyReportOneFile(weeklyRows, { start_date: filters.start_date, end_date: filters.end_date })
+    const target = await buildWeeklyReportOneFile(weeklyRows, { start_date: filters.start_date, end_date: filters.end_date })
 
     const persist = String(req.query.persist || '').toLowerCase() === '1' || String(req.query.persist || '').toLowerCase() === 'true'
     if (!persist) {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(target.fileName)}"`)
-      return res.status(200).send(Buffer.from(target.arrayBuffer))
+      return res.status(200).send(target.buffer)
     }
 
     // 持久化到 Supabase Storage（复用上面创建的 supabaseSrv）
@@ -212,7 +215,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const objectName = `${safe(community)}_小红书专业号数据_${ymd}.xlsx`
     const path = objectName
 
-    const uploadRes = await supabase.storage.from(bucket).upload(path, Buffer.from(target.arrayBuffer), {
+    const uploadRes = await supabase.storage.from(bucket).upload(path, target.buffer, {
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       upsert: true
     })
