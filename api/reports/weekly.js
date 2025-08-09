@@ -169,7 +169,8 @@ export default async function handler(req, res) {
       return Number.isFinite(n) ? n : 0
     }
     const computeViolationStatus = (rec, yc) => {
-      if (!yc) return ''
+      // 未传入黄牌条件时，保持与前端一致，返回“未设置”而不是空
+      if (!yc) return '未设置'
       const timeoutRate = parseNumber(rec.rate_1hour_timeout)
       const leads = parseNumber(rec.total_private_message_leads ?? rec.total_private_message_leads_kept)
       const publishedNotes = parseNumber(rec.published_notes_count)
@@ -197,6 +198,9 @@ export default async function handler(req, res) {
           timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
         } else if (filters && filters.start_date && filters.end_date) {
           timeRangeText = `${filters.start_date} ~ ${filters.end_date}`
+        } else if (filters && filters.yellow_card && filters.yellow_card.yellow_card_start_date && filters.yellow_card.yellow_card_end_date) {
+          // 回退到黄牌筛选的时间范围（若基础筛选未设置）
+          timeRangeText = `${filters.yellow_card.yellow_card_start_date} ~ ${filters.yellow_card.yellow_card_end_date}`
         }
         const oneHourRate = (rec && rec.rate_1hour_timeout) || ''
 

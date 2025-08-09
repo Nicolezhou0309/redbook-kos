@@ -402,12 +402,14 @@ const EmployeeSimpleJoin: React.FC = () => {
         const manager = rosterMatch?.manager || ''
         const community = rosterMatch?.community || '未匹配社区'
 
-        // 时间范围仅输出日期范围（忽略 remark）
+        // 时间范围仅输出日期范围（忽略 remark）；无基础筛选日期时回退到黄牌日期范围
         let timeRangeText = '-'
         if (rec.time_range && rec.time_range.start_date && rec.time_range.end_date) {
           timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
         } else if ((filters as any).start_date && (filters as any).end_date) {
           timeRangeText = `${(filters as any).start_date} ~ ${(filters as any).end_date}`
+        } else if (yellowCardConditions.yellow_card_start_date && yellowCardConditions.yellow_card_end_date) {
+          timeRangeText = `${yellowCardConditions.yellow_card_start_date} ~ ${yellowCardConditions.yellow_card_end_date}`
         }
 
         // 1小时回复率：取 rate_1hour_timeout 字段展示
@@ -467,12 +469,14 @@ const EmployeeSimpleJoin: React.FC = () => {
         const manager = rosterMatch?.manager || ''
         const community = rosterMatch?.community || '未匹配社区'
 
-        // 时间范围仅输出日期范围（忽略 remark）
+        // 时间范围仅输出日期范围（忽略 remark）；无基础筛选日期时回退到黄牌日期范围
         let timeRangeText = '-'
         if (rec.time_range && rec.time_range.start_date && rec.time_range.end_date) {
           timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
         } else if ((filters as any).start_date && (filters as any).end_date) {
           timeRangeText = `${(filters as any).start_date} ~ ${(filters as any).end_date}`
+        } else if (yellowCardConditions.yellow_card_start_date && yellowCardConditions.yellow_card_end_date) {
+          timeRangeText = `${yellowCardConditions.yellow_card_start_date} ~ ${yellowCardConditions.yellow_card_end_date}`
         }
 
         const oneHourRate = rec.rate_1hour_timeout || ''
@@ -1080,7 +1084,7 @@ const EmployeeSimpleJoin: React.FC = () => {
           sorter: true,
           fixed: 'left',
           render: (text: string) => (
-            <Tag color={text === 'active' ? 'green' : 'red'}>{text}</Tag>
+            <Tag color={text === 'active' ? 'green' : 'red'} style={{ textAlign: 'center', display: 'inline-block' }}>{text}</Tag>
           )
         },
         {
@@ -1092,7 +1096,7 @@ const EmployeeSimpleJoin: React.FC = () => {
             const yellowCardStatus = getYellowCardStatus(record)
             return (
               <Tooltip title={yellowCardStatus.reason || yellowCardStatus.label}>
-                <Tag color={yellowCardStatus.color}>
+                <Tag color={yellowCardStatus.color} style={{ display: 'inline-block', textAlign: 'center' }}>
                   {yellowCardStatus.label}
                 </Tag>
               </Tooltip>
@@ -1148,26 +1152,42 @@ const EmployeeSimpleJoin: React.FC = () => {
           render: (timeRange: any) => {
             if (!timeRange) return '-'
             
-            // 如果有备注信息，显示备注
-            if (timeRange.remark && timeRange.remark.trim() !== '') {
+            const hasRemark = Boolean(timeRange.remark && timeRange.remark.trim() !== '')
+            const hasDates = Boolean(timeRange.start_date && timeRange.end_date)
+
+            if (hasRemark && hasDates) {
+              const startDate = new Date(timeRange.start_date).toLocaleDateString()
+              const endDate = new Date(timeRange.end_date).toLocaleDateString()
               return (
-                <Tooltip title={`${timeRange.remark}\n开始: ${timeRange.start_date}\n结束: ${timeRange.end_date}`}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                  <Tooltip title={`${timeRange.remark}\n开始: ${timeRange.start_date}\n结束: ${timeRange.end_date}`}>
+                    <Tag color="blue">{timeRange.remark}</Tag>
+                  </Tooltip>
+                  <Tooltip title={`开始: ${timeRange.start_date}\n结束: ${timeRange.end_date}`}>
+                    <Tag color="blue">{startDate} ~ {endDate}</Tag>
+                  </Tooltip>
+                </div>
+              )
+            }
+
+            if (hasRemark) {
+              return (
+                <Tooltip title={`${timeRange.remark}${hasDates ? `\n开始: ${timeRange.start_date}\n结束: ${timeRange.end_date}` : ''}`}>
                   <Tag color="blue">{timeRange.remark}</Tag>
                 </Tooltip>
               )
             }
-            
-            // 如果没有备注但有日期范围，显示日期范围
-            if (timeRange.start_date && timeRange.end_date) {
+
+            if (hasDates) {
               const startDate = new Date(timeRange.start_date).toLocaleDateString()
               const endDate = new Date(timeRange.end_date).toLocaleDateString()
               return (
                 <Tooltip title={`开始: ${timeRange.start_date}\n结束: ${timeRange.end_date}`}>
-                  <Tag color="green">{startDate} ~ {endDate}</Tag>
+                  <Tag color="blue">{startDate} ~ {endDate}</Tag>
                 </Tooltip>
               )
             }
-            
+
             return '-'
           }
         }
@@ -1298,17 +1318,33 @@ const EmployeeSimpleJoin: React.FC = () => {
               render: (responseTimeRange: any) => {
                 if (!responseTimeRange) return '-'
                 
-                // 如果有备注信息，显示备注
-                if (responseTimeRange.remark && responseTimeRange.remark.trim() !== '') {
+                const hasRemark = Boolean(responseTimeRange.remark && responseTimeRange.remark.trim() !== '')
+                const hasDates = Boolean(responseTimeRange.start_date && responseTimeRange.end_date)
+
+                if (hasRemark && hasDates) {
+                  const startDate = new Date(responseTimeRange.start_date).toLocaleDateString()
+                  const endDate = new Date(responseTimeRange.end_date).toLocaleDateString()
                   return (
-                    <Tooltip title={`${responseTimeRange.remark}\n开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                      <Tooltip title={`${responseTimeRange.remark}\n开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
+                        <Tag color="orange">{responseTimeRange.remark}</Tag>
+                      </Tooltip>
+                      <Tooltip title={`开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
+                        <Tag color="orange">{startDate} ~ {endDate}</Tag>
+                      </Tooltip>
+                    </div>
+                  )
+                }
+
+                if (hasRemark) {
+                  return (
+                    <Tooltip title={`${responseTimeRange.remark}${hasDates ? `\n开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}` : ''}`}>
                       <Tag color="orange">{responseTimeRange.remark}</Tag>
                     </Tooltip>
                   )
                 }
-                
-                // 如果没有备注但有日期范围，显示日期范围
-                if (responseTimeRange.start_date && responseTimeRange.end_date) {
+
+                if (hasDates) {
                   const startDate = new Date(responseTimeRange.start_date).toLocaleDateString()
                   const endDate = new Date(responseTimeRange.end_date).toLocaleDateString()
                   return (
@@ -1486,6 +1522,7 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataSource={data}
           rowKey={(record, index) => record.employee_id || `index_${index}`}
           loading={loading}
+          size="small"
           pagination={false}
           onChange={handleTableChange}
           scroll={{ x: 2900, y: 600 }}
@@ -2087,6 +2124,7 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataSource={selectedEmployeeNotes}
           rowKey={(record, index) => record.id || `note_index_${index}`}
           loading={notesLoading}
+          size="small"
           pagination={{
             pageSize: 10,
             showSizeChanger: true,
