@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import multer from 'multer';
+import FormData from 'form-data';
 
 const app = express();
 const PORT = 3001;
@@ -64,8 +65,7 @@ app.post('/api/wecom/webhook-upload', upload.single('media'), async (req, res) =
       const filename = req.file.originalname || 'report.xlsx';
 
       const form = new FormData();
-      const blob = new Blob([buffer], { type: req.file.mimetype || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      form.append('media', blob, filename);
+      form.append('media', buffer, { filename, contentType: req.file.mimetype || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
       const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`;
       console.log('[/api/wecom/webhook-upload] upstream url:', uploadUrl)
@@ -86,8 +86,7 @@ app.post('/api/wecom/webhook-upload', upload.single('media'), async (req, res) =
     }
     const buffer = Buffer.from(contentBase64, 'base64');
     const form = new FormData();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    form.append('media', blob, fileName);
+    form.append('media', buffer, { filename: fileName, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`;
     console.log('[/api/wecom/webhook-upload] upstream url:', uploadUrl)
     const upstreamResp = await fetch(uploadUrl, { method: 'POST', body: form });

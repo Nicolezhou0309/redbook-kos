@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import FormData from 'form-data'
 
 // 通过服务器代理上传文件到企业微信群机器人，避免浏览器CORS
 // 请求体(JSON)：{ key: string, fileName: string, contentBase64: string }
@@ -25,10 +26,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const arrayBuffer = Buffer.from(contentBase64, 'base64')
 
-    // 使用 Node18 全局 FormData/Blob + fetch 转发
+    // 使用 Node 版 form-data 构造 multipart，避免边缘运行时不支持 Blob 的问题
     const formData = new FormData()
-    const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    formData.append('media', blob, fileName)
+    formData.append('media', arrayBuffer, { filename: fileName, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 
     const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`
     const upstreamResp = await fetch(uploadUrl, {
