@@ -155,14 +155,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(Buffer.from(target.arrayBuffer))
     }
 
-    // 持久化到 Supabase Storage
-    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-    const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
-    if (!SUPABASE_URL || !SERVICE_KEY) {
-      return res.status(500).json({ error: 'Missing SUPABASE_URL or service/anon key env' })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
+    // 持久化到 Supabase Storage（复用上面创建的 supabaseSrv）
+    const supabase = supabaseSrv
     const bucket = process.env.REPORTS_BUCKET || 'weekly-reports'
 
     // 尝试创建 bucket（需要 service key）。失败忽略（可能已存在）
