@@ -18,19 +18,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { key, media_id } = req.body || {}
-    if (!key || !media_id) {
-      res.status(400).json({ error: 'Missing key or media_id' })
-      return
-    }
+    const body = req.body || {}
+    const { key, ...rest } = body
+    if (!key) return res.status(400).json({ error: 'Missing key' })
 
+    // 允许直接传完整企业微信消息体（rest 部分）
     const sendUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${encodeURIComponent(key)}`
-    const payload = {
-      msgtype: 'file',
-      file: { media_id }
-    }
-
-    const upstreamResp = await axios.post(sendUrl, payload, { headers: { 'Content-Type': 'application/json' } })
+    const upstreamResp = await axios.post(sendUrl, rest, { headers: { 'Content-Type': 'application/json' } })
     res.status(200).json(upstreamResp.data)
   } catch (error) {
     console.error('webhook-send 代理失败:', error)

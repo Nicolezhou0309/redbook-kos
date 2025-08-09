@@ -42,7 +42,7 @@ import { employeeNotesApi } from '../lib/employeeNotesApi'
 import { disciplinaryRecordApi } from '../lib/disciplinaryRecordApi'
 import type { EmployeeNotesData } from '../types/employee'
 import type { DisciplinaryRecordForm } from '../types/employee'
-import { downloadEmployeeSimpleJoinData as downloadExcelData, downloadWeeklyReportByCommunity, downloadWeeklyReportSplitFilesByCommunity, buildWeeklyReportFilesByCommunity } from '../utils/employeeExcelUtils'
+import { downloadEmployeeSimpleJoinData as downloadExcelData, downloadWeeklyReportByCommunity, downloadWeeklyReportSplitFilesByCommunity } from '../utils/employeeExcelUtils'
 import { employeeRosterApi } from '../lib/employeeRosterApi'
 import UltimateImportModal from '../components/UltimateImportModal'
 
@@ -503,23 +503,22 @@ const EmployeeSimpleJoin: React.FC = () => {
     }
   }
 
-  // 发送周报到企业微信（分社区文件）
+  // 发送周报到企业微信（分社区：多链接 Markdown 消息）
   const handleSendWeeklyToWeCom = async () => {
     const WEBHOOK_KEY = 'e9be8161-5ed4-48b2-9823-e17d896efed7'
-    const UPLOAD_URL = `/api/wecom/webhook-upload`
     const SEND_URL = `/api/wecom/webhook-send`
 
     try {
       setSendingWeCom(true)
 
-      // 拉取全量数据
+      // 拉取全量数据，收集社区集合
       const fullResult = await downloadEmployeeSimpleJoinData(filters, sortField, sortOrder)
       if (!fullResult.success || !fullResult.data) {
         message.error(fullResult.error || '获取数据失败')
         return
       }
 
-      // 花名册索引
+      // 花名册：姓名 -> 社区
       const roster = await employeeRosterApi.getAll()
       const nameToRoster = new Map<string, typeof roster[number]>()
       for (const r of roster) {
@@ -529,105 +528,48 @@ const EmployeeSimpleJoin: React.FC = () => {
         }
       }
 
-      // 组装周报行
-      const weeklyRows = fullResult.data.map(rec => {
+      const communitySet = new Set<string>()
+      for (const rec of fullResult.data) {
         const rosterMatch = nameToRoster.get((rec.employee_name || '').trim())
-        const manager = rosterMatch?.manager || ''
         const community = rosterMatch?.community || '未匹配社区'
-
-        let timeRangeText = '-'
-        if (rec.time_range) {
-          if (rec.time_range.remark && rec.time_range.remark.trim() !== '') {
-            timeRangeText = rec.time_range.remark
-          } else if (rec.time_range.start_date && rec.time_range.end_date) {
-            timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
-          }
-        }
-
-        const oneHourRate = rec.rate_1hour_timeout || ''
-
-        return {
-          '当前使用人': rec.employee_name || '',
-          '组长': manager,
-          '社区': community,
-          '时间范围': timeRangeText,
-          '1小时回复率': oneHourRate,
-          '留资量': rec.total_private_message_leads_kept || 0,
-          '开口量': rec.total_private_message_openings || 0,
-          '发布量': rec.published_notes_count || 0,
-          '笔记曝光': rec.notes_exposure_count || 0,
-          '笔记点击': rec.notes_click_count || 0,
-          '违规状态': getViolationStatusText(rec)
-        }
-      })
-
-      // 构建内存文件
-      const files = buildWeeklyReportFilesByCommunity(weeklyRows, {
-        start_date: filters.start_date,
-        end_date: filters.end_date
-      })
-
-      if (files.length === 0) {
-        message.info('无可发送的数据')
+        if (community) communitySet.add(community)
+      }
+      const communities = Array.from(communitySet)
+      if (communities.length === 0) {
+        message.info('没有可用的社区数据')
         return
       }
 
-      // 顺序上传与发送
-      let successCount = 0
-      for (const f of files) {
-        // 本地开发走 multipart，线上（Vercel）走 JSON base64，避免云函数解析 multipart
-        const isLocal = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
-        let upResp: Response
-        if (isLocal) {
-          const blob = new Blob([f.arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-          const fd = new FormData()
-          fd.append('key', WEBHOOK_KEY)
-          fd.append('media', blob, f.fileName)
-          upResp = await fetch(UPLOAD_URL, { method: 'POST', body: fd })
-        } else {
-          const contentBase64 = btoa(String.fromCharCode(...new Uint8Array(f.arrayBuffer)))
-          upResp = await fetch(UPLOAD_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: WEBHOOK_KEY, fileName: f.fileName, contentBase64 })
-          })
-        }
-        if (!upResp.ok) {
-          const errText = await upResp.text().catch(() => '')
-          console.error('webhook-upload failed status:', upResp.status, upResp.statusText, 'body:', errText)
-        }
-        if (!upResp.ok) {
-          console.error('上传失败 HTTP:', upResp.status, upResp.statusText)
-          continue
-        }
-        const upData = await upResp.json()
-        if (upData.errcode !== 0 || !upData.media_id) {
-          console.error('上传失败:', upData)
-          continue
-        }
+      // filters 携带黄牌设置
+      const downloadFilters: any = { ...filters, yellow_card: { ...yellowCardConditions } }
+      const filtersB64 = btoa(unescape(encodeURIComponent(JSON.stringify(downloadFilters))))
+
+      const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/reports/weekly` : '/api/reports/weekly'
+      const links = communities.map(comm => ({
+        title: `${comm}小红书专业号数据`,
+        url: `${baseUrl}?community=${encodeURIComponent(comm)}&filters=${encodeURIComponent(filtersB64)}`
+      }))
+
+      // 分条发送（每条最多15个链接）
+      const chunkSize = 15
+      let sent = 0
+      for (let i = 0; i < links.length; i += chunkSize) {
+        const chunk = links.slice(i, i + chunkSize)
+        const mdLines = chunk.map(({ title, url }) => `- [${title}](${url})`).join('\n')
+        const content = `根据页面筛选结果分社区导出，导出前请先检查数据。\n${mdLines}`
 
         const sendResp = await fetch(SEND_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: WEBHOOK_KEY, media_id: upData.media_id })
+          body: JSON.stringify({ key: WEBHOOK_KEY, msgtype: 'markdown', markdown: { content } })
         })
-        if (!sendResp.ok) {
-          console.error('发送失败 HTTP:', sendResp.status, sendResp.statusText)
-          continue
-        }
+        if (!sendResp.ok) continue
         const sendData = await sendResp.json()
-        if (sendData.errcode === 0) {
-          successCount++
-        } else {
-          console.error('发送失败:', sendData)
-        }
+        if (sendData.errcode === 0) sent++
       }
 
-      if (successCount > 0) {
-        message.success(`已发送 ${successCount}/${files.length} 个社区周报到企业微信`)
-      } else {
-        message.error('发送失败，请检查Webhook配置或浏览器网络限制')
-      }
+      if (sent > 0) message.success(`企业微信已发送 ${sent} 条消息（共 ${links.length} 个社区链接）`)
+      else message.error('发送失败，请检查Webhook配置')
     } catch (e) {
       console.error(e)
       message.error('发送到企业微信失败')
