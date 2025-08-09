@@ -51,6 +51,16 @@ export default async function handler(req, res) {
       return `weekly/xhsygh_${namePart}_${datePart}.xlsx`
     }
 
+    // 统一设置下载头（兼容中文文件名）：filename 与 RFC 5987 filename*
+    const setDownloadHeaders = (res, displayName) => {
+      const asciiFallback = (toAsciiSlug(displayName) || 'file')
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(displayName)}`
+      )
+    }
+
     // debug: 直接返回一个极简 Excel（同样使用优化后的文件名）
     if (debug) {
       const { default: ExcelJS } = await import('exceljs')
@@ -62,8 +72,7 @@ export default async function handler(req, res) {
       ]
       sheet.addRow({ user: '示例', manager: '张三' })
       const buffer = await workbook.xlsx.writeBuffer()
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileNameDisplay(community, {}))}"`)
+      setDownloadHeaders(res, buildFileNameDisplay(community, {}))
       return res.status(200).send(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
     }
 
@@ -271,8 +280,7 @@ export default async function handler(req, res) {
     const persist = String(req.query.persist || '').toLowerCase() === '1' || String(req.query.persist || '').toLowerCase() === 'true'
     if (!persist) {
       const buffer = await workbook.xlsx.writeBuffer()
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileNameDisplay(community, filters))}"`)
+      setDownloadHeaders(res, buildFileNameDisplay(community, filters))
       return res.status(200).send(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
     }
 
