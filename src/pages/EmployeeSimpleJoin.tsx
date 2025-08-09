@@ -511,6 +511,10 @@ const EmployeeSimpleJoin: React.FC = () => {
     try {
       setSendingWeCom(true)
 
+      // 名称处理：兼容页面文案与未匹配社区过滤
+      const normalizeCommunityName = (name: string) => String(name || '').replace(/小红书专业号数据/g, '').trim()
+      const isUnmatched = (name: string) => /未匹配/.test(String(name || ''))
+
       // 拉取全量数据，收集社区集合
       const fullResult = await downloadEmployeeSimpleJoinData(filters, sortField, sortOrder)
       if (!fullResult.success || !fullResult.data) {
@@ -531,8 +535,10 @@ const EmployeeSimpleJoin: React.FC = () => {
       const communitySet = new Set<string>()
       for (const rec of fullResult.data) {
         const rosterMatch = nameToRoster.get((rec.employee_name || '').trim())
-        const community = rosterMatch?.community || '未匹配社区'
-        if (community) communitySet.add(community)
+        const raw = rosterMatch?.community || '未匹配社区'
+        const comm = normalizeCommunityName(raw)
+        if (!comm || isUnmatched(comm)) continue
+        communitySet.add(comm)
       }
       const communities = Array.from(communitySet)
       if (communities.length === 0) {
