@@ -43,6 +43,19 @@ app.post('/api/wecom/send', async (req, res) => {
 const upload = multer();
 app.post('/api/wecom/webhook-upload', upload.single('media'), async (req, res) => {
   try {
+    console.log('[/api/wecom/webhook-upload] incoming headers:', req.headers)
+    console.log('[/api/wecom/webhook-upload] content-type:', req.headers['content-type'])
+    console.log('[/api/wecom/webhook-upload] body keys:', Object.keys(req.body || {}))
+    if (req.file) {
+      console.log('[/api/wecom/webhook-upload] file received:', {
+        fieldname: req.file.fieldname,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      })
+    } else {
+      console.log('[/api/wecom/webhook-upload] no file in multipart, will try JSON base64 path')
+    }
     // 优先走 multipart
     let key = req.body?.key || req.query?.key;
     if (req.file && req.file.buffer) {
@@ -55,8 +68,11 @@ app.post('/api/wecom/webhook-upload', upload.single('media'), async (req, res) =
       form.append('media', blob, filename);
 
       const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`;
+      console.log('[/api/wecom/webhook-upload] upstream url:', uploadUrl)
       const upstreamResp = await fetch(uploadUrl, { method: 'POST', body: form });
+      console.log('[/api/wecom/webhook-upload] upstream status:', upstreamResp.status, upstreamResp.statusText)
       const text = await upstreamResp.text();
+      console.log('[/api/wecom/webhook-upload] upstream raw body:', text)
       let data;
       try { data = JSON.parse(text); } catch { data = { raw: text }; }
       return res.status(upstreamResp.status).json(data);
@@ -64,6 +80,7 @@ app.post('/api/wecom/webhook-upload', upload.single('media'), async (req, res) =
 
     // 兼容 JSON base64 方式
     const { fileName, contentBase64 } = req.body || {};
+    console.log('[/api/wecom/webhook-upload] json mode filename:', fileName, 'contentBase64 length:', contentBase64 ? contentBase64.length : 0)
     if (!key || !fileName || !contentBase64) {
       return res.status(400).json({ error: 'Missing key, fileName or contentBase64' });
     }
@@ -72,14 +89,17 @@ app.post('/api/wecom/webhook-upload', upload.single('media'), async (req, res) =
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     form.append('media', blob, fileName);
     const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`;
+    console.log('[/api/wecom/webhook-upload] upstream url:', uploadUrl)
     const upstreamResp = await fetch(uploadUrl, { method: 'POST', body: form });
+    console.log('[/api/wecom/webhook-upload] upstream status:', upstreamResp.status, upstreamResp.statusText)
     const text = await upstreamResp.text();
+    console.log('[/api/wecom/webhook-upload] upstream raw body:', text)
     let data;
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
     return res.status(upstreamResp.status).json(data);
   } catch (error) {
-    console.error('webhook-upload error:', error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    console.error('[/api/wecom/webhook-upload] error:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error', stack: error instanceof Error ? error.stack : undefined });
   }
 });
 

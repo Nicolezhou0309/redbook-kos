@@ -582,6 +582,10 @@ const EmployeeSimpleJoin: React.FC = () => {
         fd.append('media', blob, f.fileName)
         const upResp = await fetch(UPLOAD_URL, { method: 'POST', body: fd })
         if (!upResp.ok) {
+          const errText = await upResp.text().catch(() => '')
+          console.error('webhook-upload failed status:', upResp.status, upResp.statusText, 'body:', errText)
+        }
+        if (!upResp.ok) {
           console.error('上传失败 HTTP:', upResp.status, upResp.statusText)
           continue
         }
