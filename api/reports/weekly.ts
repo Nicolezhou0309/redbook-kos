@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { buildWeeklyReportOneFile } from '../_shared/excel.js'
 
 // 注意：此函数直接调用前端代码会引入浏览器依赖，严格生产建议复制所需逻辑到此处。
 // 为快速实现，保持最小调用路径：接受 filters/yellowCardSettings，生成单社区文件。
@@ -142,9 +143,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 复用现有批量导出函数，随后从磁盘下载会写文件；这里我们需要直接内存流，因此改用 xlsx 直接创建更合适。
     // 为保持进度，这里简单用 xlsx 组合，但通过已有的打包函数转为 arrayBuffer 再返回 attachment 更稳。
 
-    // 动态构建一个文件（仅该社区）
-    // 使用 API 目录下的共享 Node 版本工具，避免跨目录 TS 动态导入导致的打包/运行时错误
-    const { buildWeeklyReportOneFile } = await import('../_shared/excel.js')
+    // 生成文件（仅该社区）
     const target = buildWeeklyReportOneFile(weeklyRows, { start_date: filters.start_date, end_date: filters.end_date })
 
     const persist = String(req.query.persist || '').toLowerCase() === '1' || String(req.query.persist || '').toLowerCase() === 'true'
