@@ -1,6 +1,50 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import { buildWeeklyReportOneFile } from '../_shared/excel.js'
+import * as XLSX from 'xlsx'
+import dayjs from 'dayjs'
+
+function buildWeeklyReportOneFile(
+  weeklyRows: Array<Record<string, any>>,
+  options?: { start_date?: string; end_date?: string }
+): { fileName: string; arrayBuffer: ArrayBuffer } {
+  const orderedRows = weeklyRows.map((r) => ({
+    '当前使用人': r['当前使用人'] || '',
+    '组长': r['组长'] || '',
+    '社区': r['社区'] || '',
+    '时间范围': r['时间范围'] || '',
+    '1小时回复率': r['1小时回复率'] ?? r['1小时超时率'] ?? '',
+    '留资量': r['留资量'] ?? 0,
+    '开口量': r['开口量'] ?? 0,
+    '发布量': r['发布量'] ?? 0,
+    '笔记曝光': r['笔记曝光'] ?? 0,
+    '笔记点击': r['笔记点击'] ?? 0,
+    '违规状态': r['违规状态'] || '',
+  }))
+
+  const workbook = XLSX.utils.book_new()
+  const worksheet = XLSX.utils.json_to_sheet(orderedRows)
+  worksheet['!cols'] = [
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+  ]
+  XLSX.utils.book_append_sheet(workbook, worksheet, '周报')
+
+  let fileName = `员工周报_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`
+  if (options?.start_date && options?.end_date) fileName += `_${options.start_date}_${options.end_date}`
+  fileName += '.xlsx'
+
+  const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+  return { fileName, arrayBuffer }
+}
 
 // 注意：此函数直接调用前端代码会引入浏览器依赖，严格生产建议复制所需逻辑到此处。
 // 为快速实现，保持最小调用路径：接受 filters/yellowCardSettings，生成单社区文件。
