@@ -556,13 +556,37 @@ const EmployeeSimpleJoin: React.FC = () => {
         url: `${baseUrl}?community=${encodeURIComponent(comm)}&filters=${encodeURIComponent(filtersB64)}&persist=1`
       }))
 
+      // 统计每个社区：账号总数、黄牌人数、红牌人数
+      type Stats = { total: number; yellow: number; red: number }
+      const statsByCommunity = new Map<string, Stats>()
+      for (const rec of fullResult.data) {
+        const rosterMatch2 = nameToRoster.get((rec.employee_name || '').trim())
+        const raw2 = rosterMatch2?.community || '未匹配社区'
+        const comm2 = normalizeCommunityName(raw2)
+        if (!comm2 || isUnmatched(comm2)) continue
+        if (!statsByCommunity.has(comm2)) statsByCommunity.set(comm2, { total: 0, yellow: 0, red: 0 })
+        const s = statsByCommunity.get(comm2)!
+        s.total += 1
+        const y = Number((rec as any).current_yellow_cards || 0)
+        const r = Number((rec as any).current_red_cards || 0)
+        if (r > 0) s.red += 1
+        else if (y > 0) s.yellow += 1
+      }
+
+      // 组织文案：红黄牌概览 + 下载链接
+      const sortedComms = [...communities].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+      const overviewLines = sortedComms.map(comm => {
+        const s = statsByCommunity.get(comm) || { total: 0, yellow: 0, red: 0 }
+        return `${comm}：账号数${s.total}个，黄牌${s.yellow}个，红牌${s.red}个`
+      }).join('\n')
+
       // 分条发送（每条最多15个链接）
       const chunkSize = 15
       let sent = 0
       for (let i = 0; i < links.length; i += chunkSize) {
         const chunk = links.slice(i, i + chunkSize)
         const mdLines = chunk.map(({ title, url }) => `- [${title}](${url})`).join('\n')
-        const content = `根据页面筛选结果分社区导出，导出前请先检查数据。\n${mdLines}`
+        const content = `本周小红书红黄牌情况：\n${overviewLines}\n\n周报数据下载：\n${mdLines}`
 
         const sendResp = await fetch(SEND_URL, {
           method: 'POST',
