@@ -575,12 +575,23 @@ const EmployeeSimpleJoin: React.FC = () => {
       // 顺序上传与发送
       let successCount = 0
       for (const f of files) {
-        // 通过API代理上传（改为真正的 multipart/form-data，更稳）
-        const blob = new Blob([f.arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-        const fd = new FormData()
-        fd.append('key', WEBHOOK_KEY)
-        fd.append('media', blob, f.fileName)
-        const upResp = await fetch(UPLOAD_URL, { method: 'POST', body: fd })
+        // 本地开发走 multipart，线上（Vercel）走 JSON base64，避免云函数解析 multipart
+        const isLocal = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+        let upResp: Response
+        if (isLocal) {
+          const blob = new Blob([f.arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+          const fd = new FormData()
+          fd.append('key', WEBHOOK_KEY)
+          fd.append('media', blob, f.fileName)
+          upResp = await fetch(UPLOAD_URL, { method: 'POST', body: fd })
+        } else {
+          const contentBase64 = btoa(String.fromCharCode(...new Uint8Array(f.arrayBuffer)))
+          upResp = await fetch(UPLOAD_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: WEBHOOK_KEY, fileName: f.fileName, contentBase64 })
+          })
+        }
         if (!upResp.ok) {
           const errText = await upResp.text().catch(() => '')
           console.error('webhook-upload failed status:', upResp.status, upResp.statusText, 'body:', errText)
