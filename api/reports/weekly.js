@@ -161,6 +161,30 @@ export default async function handler(req, res) {
       }
     }
 
+    const parseNumber = (v) => {
+      if (v == null) return 0
+      if (typeof v === 'number') return v
+      const s = String(v).replace('%', '').trim()
+      const n = parseFloat(s)
+      return Number.isFinite(n) ? n : 0
+    }
+    const computeViolationStatus = (rec, yc) => {
+      if (!yc) return ''
+      const timeoutRate = parseNumber(rec.rate_1hour_timeout)
+      const leads = parseNumber(rec.total_private_message_leads ?? rec.total_private_message_leads_kept)
+      const publishedNotes = parseNumber(rec.published_notes_count)
+      const cond1 = yc.yellow_card_timeout_rate != null && yc.yellow_card_min_private_message_leads != null
+        ? (timeoutRate > parseNumber(yc.yellow_card_timeout_rate) && leads > parseNumber(yc.yellow_card_min_private_message_leads))
+        : false
+      const cond2 = yc.yellow_card_notes_count != null
+        ? (publishedNotes < parseNumber(yc.yellow_card_notes_count))
+        : false
+      if (cond1 && cond2) return '回复率/发布量'
+      if (cond1) return '回复率'
+      if (cond2) return '发布量'
+      return '正常'
+    }
+
     const weeklyRows = allRows
       .map((rec) => {
         const rosterMatch = nameToRoster.get(String(rec.employee_name || '').trim())
@@ -169,10 +193,15 @@ export default async function handler(req, res) {
         const comm = normalizeCommunityName(commRaw)
 
         let timeRangeText = '-'
-        if (rec && rec.time_range) {
+        const remarkFromFilter = (filters && filters.time_range_remark && String(filters.time_range_remark).trim()) || ''
+        if (remarkFromFilter) {
+          timeRangeText = remarkFromFilter
+        } else if (rec && rec.time_range) {
           const tr = rec.time_range
           if (tr.remark && String(tr.remark).trim() !== '') timeRangeText = tr.remark
           else if (tr.start_date && tr.end_date) timeRangeText = `${tr.start_date} ~ ${tr.end_date}`
+        } else if (filters && filters.start_date && filters.end_date) {
+          timeRangeText = `${filters.start_date} ~ ${filters.end_date}`
         }
         const oneHourRate = (rec && rec.rate_1hour_timeout) || ''
 
@@ -187,7 +216,7 @@ export default async function handler(req, res) {
           '发布量': (rec && rec.published_notes_count) || 0,
           '笔记曝光': (rec && rec.notes_exposure_count) || 0,
           '笔记点击': (rec && rec.notes_click_count) || 0,
-          '违规状态': '',
+          '违规状态': computeViolationStatus(rec, filters && filters.yellow_card),
         }
       })
       // 永久排除未匹配社区；若指定 community/communities，则按名单过滤
