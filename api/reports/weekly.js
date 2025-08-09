@@ -193,13 +193,8 @@ export default async function handler(req, res) {
         const comm = normalizeCommunityName(commRaw)
 
         let timeRangeText = '-'
-        const remarkFromFilter = (filters && filters.time_range_remark && String(filters.time_range_remark).trim()) || ''
-        if (remarkFromFilter) {
-          timeRangeText = remarkFromFilter
-        } else if (rec && rec.time_range) {
-          const tr = rec.time_range
-          if (tr.remark && String(tr.remark).trim() !== '') timeRangeText = tr.remark
-          else if (tr.start_date && tr.end_date) timeRangeText = `${tr.start_date} ~ ${tr.end_date}`
+        if (rec && rec.time_range && rec.time_range.start_date && rec.time_range.end_date) {
+          timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
         } else if (filters && filters.start_date && filters.end_date) {
           timeRangeText = `${filters.start_date} ~ ${filters.end_date}`
         }
