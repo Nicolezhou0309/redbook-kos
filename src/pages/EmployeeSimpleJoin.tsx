@@ -402,14 +402,12 @@ const EmployeeSimpleJoin: React.FC = () => {
         const manager = rosterMatch?.manager || ''
         const community = rosterMatch?.community || '未匹配社区'
 
-        // 时间范围（互动时间范围）
+        // 时间范围仅输出日期范围（忽略 remark）
         let timeRangeText = '-'
-        if (rec.time_range) {
-          if (rec.time_range.remark && rec.time_range.remark.trim() !== '') {
-            timeRangeText = rec.time_range.remark
-          } else if (rec.time_range.start_date && rec.time_range.end_date) {
-            timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
-          }
+        if (rec.time_range && rec.time_range.start_date && rec.time_range.end_date) {
+          timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
+        } else if ((filters as any).start_date && (filters as any).end_date) {
+          timeRangeText = `${(filters as any).start_date} ~ ${(filters as any).end_date}`
         }
 
         // 1小时回复率：取 rate_1hour_timeout 字段展示
@@ -469,13 +467,12 @@ const EmployeeSimpleJoin: React.FC = () => {
         const manager = rosterMatch?.manager || ''
         const community = rosterMatch?.community || '未匹配社区'
 
+        // 时间范围仅输出日期范围（忽略 remark）
         let timeRangeText = '-'
-        if (rec.time_range) {
-          if (rec.time_range.remark && rec.time_range.remark.trim() !== '') {
-            timeRangeText = rec.time_range.remark
-          } else if (rec.time_range.start_date && rec.time_range.end_date) {
-            timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
-          }
+        if (rec.time_range && rec.time_range.start_date && rec.time_range.end_date) {
+          timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
+        } else if ((filters as any).start_date && (filters as any).end_date) {
+          timeRangeText = `${(filters as any).start_date} ~ ${(filters as any).end_date}`
         }
 
         const oneHourRate = rec.rate_1hour_timeout || ''
