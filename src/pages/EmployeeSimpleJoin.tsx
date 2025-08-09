@@ -556,28 +556,66 @@ const EmployeeSimpleJoin: React.FC = () => {
         url: `${baseUrl}?community=${encodeURIComponent(comm)}&filters=${encodeURIComponent(filtersB64)}&persist=1`
       }))
 
-      // 统计每个社区：账号总数、黄牌人数、红牌人数
-      type Stats = { total: number; yellow: number; red: number }
+      // 统计每个社区：总账号数、本周违规数、违规率（仅统计当前筛选时间范围内的数据）
+      type Stats = { total: number; violated: number }
       const statsByCommunity = new Map<string, Stats>()
+
+      const inFilterRange = (rec: any): boolean => {
+        const fs = (filters as any).start_date
+        const fe = (filters as any).end_date
+        if (!fs || !fe) return true
+        const tr = (rec as any).time_range
+        if (!tr || !tr.start_date || !tr.end_date) return false
+        return tr.start_date <= fe && tr.end_date >= fs
+      }
+
+      const parseNumber = (v: any): number => {
+        if (v == null) return 0
+        if (typeof v === 'number') return v
+        const s = String(v).replace('%', '').trim()
+        const n = parseFloat(s)
+        return Number.isFinite(n) ? n : 0
+      }
+
+      const isViolatedThisWeek = (rec: any): boolean => {
+        if (!inFilterRange(rec)) return false
+        const yc: any = yellowCardConditions || {}
+        const hasYC = yc && (yc.yellow_card_timeout_rate != null || yc.yellow_card_notes_count != null || yc.yellow_card_min_private_message_leads != null)
+        if (hasYC) {
+          const timeoutRate = parseNumber(rec.rate_1hour_timeout)
+          const leads = parseNumber((rec as any).total_private_message_leads ?? (rec as any).total_private_message_leads_kept)
+          const publishedNotes = parseNumber(rec.published_notes_count)
+          const cond1 = yc.yellow_card_timeout_rate != null && yc.yellow_card_min_private_message_leads != null
+            ? (timeoutRate > parseNumber(yc.yellow_card_timeout_rate) && leads > parseNumber(yc.yellow_card_min_private_message_leads))
+            : false
+          const cond2 = yc.yellow_card_notes_count != null
+            ? (publishedNotes < parseNumber(yc.yellow_card_notes_count))
+            : false
+          return cond1 || cond2
+        }
+        const y = Number((rec as any).current_yellow_cards || 0)
+        const r = Number((rec as any).current_red_cards || 0)
+        return (y > 0 || r > 0)
+      }
+
       for (const rec of fullResult.data) {
         const rosterMatch2 = nameToRoster.get((rec.employee_name || '').trim())
         const raw2 = rosterMatch2?.community || '未匹配社区'
         const comm2 = normalizeCommunityName(raw2)
         if (!comm2 || isUnmatched(comm2)) continue
-        if (!statsByCommunity.has(comm2)) statsByCommunity.set(comm2, { total: 0, yellow: 0, red: 0 })
+        if (!inFilterRange(rec)) continue
+        if (!statsByCommunity.has(comm2)) statsByCommunity.set(comm2, { total: 0, violated: 0 })
         const s = statsByCommunity.get(comm2)!
         s.total += 1
-        const y = Number((rec as any).current_yellow_cards || 0)
-        const r = Number((rec as any).current_red_cards || 0)
-        if (r > 0) s.red += 1
-        else if (y > 0) s.yellow += 1
+        if (isViolatedThisWeek(rec)) s.violated += 1
       }
 
-      // 组织文案：红黄牌概览 + 下载链接
+      // 组织文案：运营情况 + 下载链接
       const sortedComms = [...communities].sort((a, b) => a.localeCompare(b, 'zh-CN'))
       const overviewLines = sortedComms.map(comm => {
-        const s = statsByCommunity.get(comm) || { total: 0, yellow: 0, red: 0 }
-        return `${comm}：账号数${s.total}个，黄牌${s.yellow}个，红牌${s.red}个`
+        const s = statsByCommunity.get(comm) || { total: 0, violated: 0 }
+        const rate = s.total > 0 ? ((s.violated / s.total) * 100).toFixed(1) + '%' : '0%'
+        return `${comm}：总账号数${s.total}个，违规${s.violated}个，违规率${rate}`
       }).join('\n')
 
       // 分条发送（每条最多15个链接）
@@ -586,7 +624,7 @@ const EmployeeSimpleJoin: React.FC = () => {
       for (let i = 0; i < links.length; i += chunkSize) {
         const chunk = links.slice(i, i + chunkSize)
         const mdLines = chunk.map(({ title, url }) => `- [${title}](${url})`).join('\n')
-        const content = `本周小红书红黄牌情况：\n${overviewLines}\n\n周报数据下载：\n${mdLines}`
+        const content = `本周小红书员工号运营情况：\n${overviewLines}\n\n周报数据下载：\n${mdLines}`
 
         const sendResp = await fetch(SEND_URL, {
           method: 'POST',
