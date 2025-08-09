@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 export default async function handler(req, res) {
   try {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -41,8 +43,12 @@ export default async function handler(req, res) {
         ? `${filters.start_date}_${filters.end_date}`
         : new Date().toISOString().slice(0, 10)
       const nameComm = comm && comm.trim() !== '' ? comm : 'all'
-      // 放入 weekly/ 前缀，使用 ASCII 安全 key，避免存储层 Invalid key
-      return `weekly/${toAsciiSlug(`xhsygh_${nameComm}_${datePart}.xlsx`).toLowerCase()}`
+      let namePart = toAsciiSlug(nameComm)
+      if (!namePart) {
+        const hash8 = createHash('sha1').update(String(nameComm), 'utf8').digest('hex').slice(0, 8)
+        namePart = `c${hash8}`
+      }
+      return `weekly/xhsygh_${namePart}_${datePart}.xlsx`
     }
 
     // debug: 直接返回一个极简 Excel（同样使用优化后的文件名）
