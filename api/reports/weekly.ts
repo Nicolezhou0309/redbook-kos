@@ -1,12 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import ExcelJS from 'exceljs'
+// 避免在 Vercel 顶层导入引发运行时解析问题，改为在函数中动态导入
 import dayjs from 'dayjs'
 
 async function buildWeeklyReportOneFile(
   weeklyRows: Array<Record<string, any>>,
   options?: { start_date?: string; end_date?: string }
 ): Promise<{ fileName: string; buffer: Buffer }> {
+  const ExcelJS = (await import('exceljs')).default
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('周报')
 
