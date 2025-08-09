@@ -20,12 +20,29 @@ export default async function handler(req, res) {
     const filters = filtersB64 ? JSON.parse(Buffer.from(filtersB64, 'base64').toString('utf-8')) : {}
 
     const safe = (s) => String(s).replace(/[\\/:*?"<>|\n\r]/g, ' ').slice(0, 80)
-    const buildFileName = (comm, filters) => {
+    const toAsciiSlug = (s) => {
+      return String(s)
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '') // 兼容重音
+        .replace(/[^\x00-\x7F]/g, '') // 去除非 ASCII
+        .replace(/[^A-Za-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'file'
+    }
+    const buildFileNameDisplay = (comm, filters) => {
       const datePart = (filters && filters.start_date && filters.end_date)
         ? `${filters.start_date}_${filters.end_date}`
         : new Date().toISOString().slice(0, 10)
       const nameComm = comm && comm.trim() !== '' ? safe(comm) : '全部'
-      return `员工周报_${nameComm}_${datePart}.xlsx`
+      return `小红书员工号周报_${nameComm}_${datePart}.xlsx`
+    }
+    const buildObjectKey = (comm, filters) => {
+      const datePart = (filters && filters.start_date && filters.end_date)
+        ? `${filters.start_date}_${filters.end_date}`
+        : new Date().toISOString().slice(0, 10)
+      const nameComm = comm && comm.trim() !== '' ? comm : 'all'
+      // 放入 weekly/ 前缀，使用 ASCII 安全 key，避免存储层 Invalid key
+      return `weekly/${toAsciiSlug(`xhsygh_${nameComm}_${datePart}.xlsx`).toLowerCase()}`
     }
 
     // debug: 直接返回一个极简 Excel（同样使用优化后的文件名）
@@ -40,7 +57,7 @@ export default async function handler(req, res) {
       sheet.addRow({ user: '示例', manager: '张三' })
       const buffer = await workbook.xlsx.writeBuffer()
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileName(community, {}))}"`)
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileNameDisplay(community, {}))}"`)
       return res.status(200).send(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
     }
 
@@ -203,7 +220,7 @@ export default async function handler(req, res) {
           })
         }
         const buf = await wb.xlsx.writeBuffer()
-        zip.file(buildFileName(comm, filters), Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
+        zip.file(buildFileNameDisplay(comm, filters), Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
       }
       const zipName = `员工周报_分社区_${(filters && filters.start_date && filters.end_date) ? `${filters.start_date}_${filters.end_date}` : new Date().toISOString().slice(0, 10)}.zip`
       const zipBuf = await zip.generateAsync({ type: 'nodebuffer' })
@@ -249,14 +266,14 @@ export default async function handler(req, res) {
     if (!persist) {
       const buffer = await workbook.xlsx.writeBuffer()
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileName(community, filters))}"`)
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(buildFileNameDisplay(community, filters))}"`)
       return res.status(200).send(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
     }
 
     // 上传到 Supabase Storage
     const bucket = process.env.REPORTS_BUCKET || 'weekly-reports'
     try { await supabaseSrv.storage.createBucket(bucket, { public: true }) } catch {}
-    const objectName = buildFileName(community, filters)
+    const objectName = buildObjectKey(community, filters)
     const path = objectName
 
     const buffer = await workbook.xlsx.writeBuffer()
