@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import FormData from 'form-data'
+import axios from 'axios'
 
 // 通过服务器代理上传文件到企业微信群机器人，避免浏览器CORS
 // 请求体(JSON)：{ key: string, fileName: string, contentBase64: string }
@@ -31,13 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     formData.append('media', arrayBuffer, { filename: fileName, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 
     const uploadUrl = `https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=${encodeURIComponent(key)}&type=file`
-    const upstreamResp = await fetch(uploadUrl, {
-      method: 'POST',
-      body: formData as any
-    })
-    const upstreamData = await upstreamResp.json()
-
-    res.status(upstreamResp.status).json(upstreamData)
+    const upstreamResp = await axios.post(uploadUrl, formData as any, { headers: (formData as any).getHeaders?.() })
+    res.status(200).json(upstreamResp.data)
   } catch (error) {
     console.error('webhook-upload 代理失败:', error)
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
