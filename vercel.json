@@ -3,35 +3,12 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "api/wecom/token.ts": {
-      "runtime": "@vercel/node@5.3.11"
-    },
-    "api/wecom/send.ts": {
-      "runtime": "@vercel/node@5.3.11"
-    },
-    "api/wecom/token-fixed.ts": {
-      "runtime": "@vercel/node@5.3.11"
-    },
-    "api/wecom/send-fixed.ts": {
-      "runtime": "@vercel/node@5.3.11"
-    },
-    "api/wecom/test.ts": {
-      "runtime": "@vercel/node@5.3.11"
-    }
+    "api/wecom/token.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/wecom/send.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/wecom/webhook-send.ts": { "runtime": "@vercel/node@5.3.11" },
+    "api/wecom/webhook-upload.ts": { "runtime": "@vercel/node@5.3.11" }
   },
   "rewrites": [
-    {
-      "source": "/api/wecom/token",
-      "destination": "/api/wecom/token-fixed"
-    },
-    {
-      "source": "/api/wecom/send",
-      "destination": "/api/wecom/send-fixed"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
