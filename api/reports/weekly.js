@@ -5,7 +5,13 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
     const communityRaw = String(req.query.community || '').trim()
-    const community = communityRaw // 为空表示不过滤社区
+    const split = String(req.query.split || '').toLowerCase() === '1' || String(req.query.split || '').toLowerCase() === 'true'
+    const normalizeCommunityName = (name) => {
+      const n = String(name || '').replace(/小红书专业号数据/g, '').trim()
+      return n
+    }
+    const isUnmatched = (name) => /未匹配/.test(String(name || ''))
+    const community = normalizeCommunityName(communityRaw) // 为空表示不过滤社区
     const debug = String(req.query.debug || '').toLowerCase() === '1' || String(req.query.debug || '').toLowerCase() === 'true'
     const maxParam = parseInt(String(req.query.max || '').trim(), 10)
     const pageSizeOverride = Number.isFinite(maxParam) && maxParam > 0 ? Math.min(maxParam, 5000) : undefined
@@ -147,14 +153,66 @@ export default async function handler(req, res) {
           '违规状态': '',
         }
       })
-      // 1) 永久排除未匹配社区 2) 若指定 community，则只保留该社区
-      .filter((r) => r['社区'] && r['社区'] !== '未匹配社区' && (!community || r['社区'] === community))
+      // 永久排除未匹配社区；若指定 community，则只保留该社区
+      .filter((r) => r['社区'] && !isUnmatched(r['社区']) && (!community || r['社区'] === community))
 
     if (!weeklyRows.length) {
       return res.status(404).json({ error: '无该社区数据或均为未匹配社区，未返回记录' })
     }
 
-    // 生成 Excel
+    // split=1：按社区分文件导出（打包为 zip 返回）
+    if (split) {
+      const groups = new Map()
+      for (const r of weeklyRows) {
+        const comm = String(r['社区']).trim()
+        if (!groups.has(comm)) groups.set(comm, [])
+        groups.get(comm).push(r)
+      }
+      const { default: ExcelJS } = await import('exceljs')
+      const { default: JSZip } = await import('jszip')
+      const zip = new JSZip()
+      for (const [comm, rows] of groups.entries()) {
+        const wb = new ExcelJS.Workbook()
+        const sh = wb.addWorksheet('周报')
+        sh.columns = [
+          { header: '当前使用人', key: 'user', width: 14 },
+          { header: '组长', key: 'manager', width: 12 },
+          { header: '社区', key: 'community', width: 12 },
+          { header: '时间范围', key: 'range', width: 20 },
+          { header: '1小时回复率', key: 'oneHourRate', width: 14 },
+          { header: '留资量', key: 'leadsKept', width: 10 },
+          { header: '开口量', key: 'openings', width: 10 },
+          { header: '发布量', key: 'published', width: 10 },
+          { header: '笔记曝光', key: 'exposure', width: 12 },
+          { header: '笔记点击', key: 'clicks', width: 12 },
+          { header: '违规状态', key: 'violation', width: 12 },
+        ]
+        for (const r of rows) {
+          sh.addRow({
+            user: r['当前使用人'] || '',
+            manager: r['组长'] || '',
+            community: r['社区'] || '',
+            range: r['时间范围'] || '',
+            oneHourRate: r['1小时回复率'] ?? r['1小时超时率'] ?? '',
+            leadsKept: r['留资量'] ?? 0,
+            openings: r['开口量'] ?? 0,
+            published: r['发布量'] ?? 0,
+            exposure: r['笔记曝光'] ?? 0,
+            clicks: r['笔记点击'] ?? 0,
+            violation: r['违规状态'] || '',
+          })
+        }
+        const buf = await wb.xlsx.writeBuffer()
+        zip.file(buildFileName(comm, filters), Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
+      }
+      const zipName = `员工周报_分社区_${(filters && filters.start_date && filters.end_date) ? `${filters.start_date}_${filters.end_date}` : new Date().toISOString().slice(0, 10)}.zip`
+      const zipBuf = await zip.generateAsync({ type: 'nodebuffer' })
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(zipName)}"`)
+      return res.status(200).send(zipBuf)
+    }
+
+    // 常规：单文件导出（全部或指定社区）
     const { default: ExcelJS } = await import('exceljs')
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('周报')
