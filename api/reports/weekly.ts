@@ -1,6 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { employeeRosterApi } from '../../src/lib/employeeRosterApi'
-import { downloadEmployeeSimpleJoinData } from '../../src/lib/employeeSimpleJoinApi'
 import { createClient } from '@supabase/supabase-js'
 
 // 注意：此函数直接调用前端代码会引入浏览器依赖，严格生产建议复制所需逻辑到此处。
@@ -17,24 +15,100 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const filters = filtersB64 ? JSON.parse(Buffer.from(filtersB64, 'base64').toString('utf-8')) : {}
 
-    // 拉取全量数据
-    const full = await downloadEmployeeSimpleJoinData(filters)
-    if (!full.success || !full.data) {
-      return res.status(500).json({ error: full.error || '获取数据失败' })
+    // 创建服务端 Supabase 客户端
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+    if (!SUPABASE_URL || !SERVICE_KEY) {
+      return res.status(500).json({ error: 'Missing SUPABASE_URL or service/anon key env' })
+    }
+    const supabaseSrv = createClient(SUPABASE_URL, SERVICE_KEY)
+
+    // 拉取全量数据（直接调用 RPC，避免引用前端代码）
+    const rpcParams: Record<string, any> = {
+      search_query: filters.search_query || null,
+      filter_employee_name: filters.filter_employee_name || null,
+      filter_employee_uid: filters.filter_employee_uid || null,
+      filter_xiaohongshu_nickname: filters.filter_xiaohongshu_nickname || null,
+      filter_region: filters.filter_region || null,
+      filter_status: filters.filter_status || null,
+      time_range_remark: filters.time_range_remark || null,
+      start_date: filters.start_date || null,
+      end_date: filters.end_date || null,
+      min_interactions: filters.min_interactions || null,
+      max_interactions: filters.max_interactions || null,
+      min_form_leads: filters.min_form_leads || null,
+      max_form_leads: filters.max_form_leads || null,
+      min_private_message_leads: filters.min_private_message_leads || null,
+      max_private_message_leads: filters.max_private_message_leads || null,
+      min_private_message_openings: filters.min_private_message_openings || null,
+      max_private_message_openings: filters.max_private_message_openings || null,
+      min_private_message_leads_kept: filters.min_private_message_leads_kept || null,
+      max_private_message_leads_kept: filters.max_private_message_leads_kept || null,
+      min_notes_exposure_count: filters.min_notes_exposure_count || null,
+      max_notes_exposure_count: filters.max_notes_exposure_count || null,
+      min_notes_click_count: filters.min_notes_click_count || null,
+      max_notes_click_count: filters.max_notes_click_count || null,
+      min_published_notes_count: filters.min_published_notes_count || null,
+      max_published_notes_count: filters.max_published_notes_count || null,
+      min_promoted_notes_count: filters.min_promoted_notes_count || null,
+      max_promoted_notes_count: filters.max_promoted_notes_count || null,
+      min_notes_promotion_cost: filters.min_notes_promotion_cost || null,
+      max_notes_promotion_cost: filters.max_notes_promotion_cost || null,
+      min_response_time: filters.min_response_time || null,
+      max_response_time: filters.max_response_time || null,
+      min_user_rating: filters.min_user_rating || null,
+      max_user_rating: filters.max_user_rating || null,
+      min_score_15s_response: filters.min_score_15s_response || null,
+      max_score_15s_response: filters.max_score_15s_response || null,
+      min_score_30s_response: filters.min_score_30s_response || null,
+      max_score_30s_response: filters.max_score_30s_response || null,
+      min_score_1min_response: filters.min_score_1min_response || null,
+      max_score_1min_response: filters.max_score_1min_response || null,
+      min_score_1hour_timeout: filters.min_score_1hour_timeout || null,
+      max_score_1hour_timeout: filters.max_score_1hour_timeout || null,
+      min_score_avg_response_time: filters.min_score_avg_response_time || null,
+      max_score_avg_response_time: filters.max_score_avg_response_time || null,
+      min_rate_15s_response: filters.min_rate_15s_response || null,
+      max_rate_15s_response: filters.max_rate_15s_response || null,
+      min_rate_30s_response: filters.min_rate_30s_response || null,
+      max_rate_30s_response: filters.max_rate_30s_response || null,
+      min_rate_1min_response: filters.min_rate_1min_response || null,
+      max_rate_1min_response: filters.max_rate_1min_response || null,
+      min_rate_1hour_timeout: filters.min_rate_1hour_timeout || null,
+      max_rate_1hour_timeout: filters.max_rate_1hour_timeout || null,
+      yellow_card_timeout_rate: filters.yellow_card_timeout_rate || null,
+      yellow_card_notes_count: filters.yellow_card_notes_count || null,
+      yellow_card_min_private_message_leads: filters.yellow_card_min_private_message_leads || null,
+      yellow_card_start_date: filters.yellow_card_start_date || null,
+      yellow_card_end_date: filters.yellow_card_end_date || null,
+      sort_by: 'employee_name',
+      sort_direction: 'asc',
+      page_number: 1,
+      page_size: 999999
     }
 
+    const { data: joinData, error: joinErr } = await (supabaseSrv as any).rpc('get_employee_join_data', rpcParams)
+    if (joinErr) {
+      return res.status(500).json({ error: `RPC失败: ${joinErr.message}` })
+    }
+    const allRows: any[] = Array.isArray(joinData) ? [...joinData] : []
+    if (allRows.length > 0 && (allRows[allRows.length - 1] as any).total_count) allRows.pop()
+
     // 花名册索引
-    const roster = await employeeRosterApi.getAll()
-    const nameToRoster = new Map<string, (typeof roster)[number]>()
-    for (const r of roster) {
+    const { data: rosterData, error: rosterErr } = await supabaseSrv
+      .from('employee_roster')
+      .select('employee_name, manager, community')
+    if (rosterErr) return res.status(500).json({ error: `花名册获取失败: ${rosterErr.message}` })
+    const nameToRoster = new Map<string, { employee_name: string; manager: string | null; community: string | null }>()
+    for (const r of (rosterData || [])) {
       if (r.employee_name) {
         const key = r.employee_name.trim()
-        if (!nameToRoster.has(key)) nameToRoster.set(key, r)
+        if (!nameToRoster.has(key)) nameToRoster.set(key, r as any)
       }
     }
 
     // 组装周报行（仅该社区）
-    const weeklyRows = full.data
+    const weeklyRows = allRows
       .map(rec => {
         const rosterMatch = nameToRoster.get((rec.employee_name || '').trim())
         const manager = rosterMatch?.manager || ''
