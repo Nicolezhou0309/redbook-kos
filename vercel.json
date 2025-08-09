@@ -4,12 +4,7 @@
   "framework": "vite",
   "functions": {
     "api/**/*.js": { "runtime": "@vercel/node@5.3.11" },
-    "api/**/*.ts": { "runtime": "@vercel/node@5.3.11" },
-    "api/wecom/token.ts": { "runtime": "@vercel/node@5.3.11" },
-    "api/wecom/send.ts": { "runtime": "@vercel/node@5.3.11" },
-    "api/wecom/webhook-send.js": { "runtime": "@vercel/node@5.3.11" },
-    "api/reports/weekly.ts": { "runtime": "@vercel/node@5.3.11" },
-    "api/reports/weekly_debug.ts": { "runtime": "@vercel/node@5.3.11" }
+    "api/**/*.ts": { "runtime": "@vercel/node@5.3.11" }
   },
   "rewrites": [
     {
