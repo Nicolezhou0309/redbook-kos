@@ -109,6 +109,9 @@ const EmployeeSimpleJoin: React.FC = () => {
   const [exportingWeekly, setExportingWeekly] = useState(false)
   const [exportingWeeklySplit, setExportingWeeklySplit] = useState(false)
   const [sendingWeCom, setSendingWeCom] = useState(false)
+  const [wecomPreviewVisible, setWecomPreviewVisible] = useState(false)
+  const [wecomPreviewMessages, setWecomPreviewMessages] = useState<string[]>([])
+  const [wecomPreviewLoading, setWecomPreviewLoading] = useState(false)
   
   // 批量上传相关状态
   const [importModalVisible, setImportModalVisible] = useState(false)
@@ -617,27 +620,17 @@ const EmployeeSimpleJoin: React.FC = () => {
         const rate = s.total > 0 ? ((s.violated / s.total) * 100).toFixed(1) + '%' : '0%'
         return `${comm}：总账号数${s.total}个，违规${s.violated}个，违规率${rate}`
       }).join('\n')
-
-      // 分条发送（每条最多15个链接）
+      // 组装预览消息，每条最多15个链接
       const chunkSize = 15
-      let sent = 0
+      const messages: string[] = []
       for (let i = 0; i < links.length; i += chunkSize) {
         const chunk = links.slice(i, i + chunkSize)
         const mdLines = chunk.map(({ title, url }) => `- [${title}](${url})`).join('\n')
         const content = `本周小红书员工号运营情况：\n${overviewLines}\n\n周报数据下载：\n${mdLines}`
-
-        const sendResp = await fetch(SEND_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: WEBHOOK_KEY, msgtype: 'markdown', markdown: { content } })
-        })
-        if (!sendResp.ok) continue
-        const sendData = await sendResp.json()
-        if (sendData.errcode === 0) sent++
+        messages.push(content)
       }
-
-      if (sent > 0) message.success(`企业微信已发送 ${sent} 条消息（共 ${links.length} 个社区链接）`)
-      else message.error('发送失败，请检查Webhook配置')
+      setWecomPreviewMessages(messages)
+      setWecomPreviewVisible(true)
     } catch (e) {
       console.error(e)
       message.error('发送到企业微信失败')
@@ -1513,6 +1506,53 @@ const EmployeeSimpleJoin: React.FC = () => {
           />
         </div>
       </Card>
+
+      {/* 企业微信发送前预览弹窗 */}
+      <Modal
+        title="发送到企业微信 - 二次确认"
+        open={wecomPreviewVisible}
+        onCancel={() => setWecomPreviewVisible(false)}
+        onOk={async () => {
+          if (wecomPreviewLoading) return
+          const WEBHOOK_KEY = 'e9be8161-5ed4-48b2-9823-e17d896efed7'
+          const SEND_URL = `/api/wecom/webhook-send`
+          try {
+            setWecomPreviewLoading(true)
+            let sent = 0
+            for (const content of wecomPreviewMessages) {
+              const sendResp = await fetch(SEND_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: WEBHOOK_KEY, msgtype: 'markdown', markdown: { content } })
+              })
+              if (!sendResp.ok) continue
+              const sendData = await sendResp.json()
+              if (sendData.errcode === 0) sent++
+            }
+            setWecomPreviewVisible(false)
+            if (sent > 0) message.success(`企业微信已发送 ${sent} 条消息（共 ${wecomPreviewMessages.length} 条）`)
+            else message.error('发送失败，请检查Webhook配置')
+          } catch (e) {
+            console.error(e)
+            message.error('发送到企业微信失败')
+          } finally {
+            setWecomPreviewLoading(false)
+          }
+        }}
+        okText={wecomPreviewLoading ? '发送中...' : '确认发送'}
+        okButtonProps={{ loading: wecomPreviewLoading }}
+        width={800}
+      >
+        <div style={{ maxHeight: 400, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 13 }}>
+          {wecomPreviewMessages.map((msg, idx) => (
+            <div key={idx} style={{ marginBottom: 16 }}>
+              <div style={{ color: '#999', marginBottom: 8 }}>第 {idx + 1} 条消息预览</div>
+              <pre style={{ margin: 0 }}>{msg}</pre>
+            </div>
+          ))}
+          {wecomPreviewMessages.length === 0 && <div>暂无内容</div>}
+        </div>
+      </Modal>
 
       {/* 筛选弹窗 */}
       <Modal
