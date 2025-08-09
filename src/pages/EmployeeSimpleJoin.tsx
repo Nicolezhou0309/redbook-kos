@@ -547,7 +547,7 @@ const EmployeeSimpleJoin: React.FC = () => {
       const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/reports/weekly` : '/api/reports/weekly'
       const links = communities.map(comm => ({
         title: `${comm}小红书专业号数据`,
-        url: `${baseUrl}?community=${encodeURIComponent(comm)}&filters=${encodeURIComponent(filtersB64)}`
+        url: `${baseUrl}?community=${encodeURIComponent(comm)}&filters=${encodeURIComponent(filtersB64)}&persist=1`
       }))
 
       // 分条发送（每条最多15个链接）
