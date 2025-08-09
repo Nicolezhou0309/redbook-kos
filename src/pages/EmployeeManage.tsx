@@ -782,7 +782,7 @@ export default function EmployeeManage() {
     <div>
       {/* 主卡片 */}
       <Card
-        title="员工管理"
+        title="账号管理"
         extra={
           <Space>
             <Search
@@ -951,13 +951,13 @@ export default function EmployeeManage() {
           
           <Form.Item
             name="employee_uid"
-            label="员工UID"
+            label="员工号UID"
             rules={[
-              { required: true, message: '请输入员工UID' },
-              { pattern: /^[A-Za-z0-9_-]+$/, message: 'UID只能包含字母、数字、下划线和连字符' }
+              { required: true, message: '请输入员工号UID' },
+              { pattern: /^[A-Za-z0-9_-]+$/, message: '员工号UID只能包含字母、数字、下划线和连字符' }
             ]}
           >
-            <Input placeholder="请输入员工UID" />
+            <Input placeholder="请输入员工号UID" />
           </Form.Item>
           
           <Form.Item

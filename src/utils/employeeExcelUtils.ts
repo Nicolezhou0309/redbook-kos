@@ -371,3 +371,198 @@ export const downloadEmployeeSimpleJoinData = (data: any[], timeRange?: { start_
 
   return fileName;
 }; 
+
+// 员工周报（按社区分表）导出
+// weeklyRows: 形如 [{ '当前使用人': string, '组长': string, '社区': string, '时间范围': string, '1小时回复率': string, '留资量': number, '开口量': number, '发布量': number, '笔记曝光': number, '笔记点击': number, '违规状态': string }]
+// options: { start_date?: string; end_date?: string }
+export const downloadWeeklyReportByCommunity = (
+  weeklyRows: Array<Record<string, any>>,
+  options?: { start_date?: string; end_date?: string }
+) => {
+  const groups = new Map<string, Record<string, any>[]>();
+
+  // 分组：社区
+  for (const row of weeklyRows) {
+    const community = (row['社区'] && String(row['社区']).trim()) || '未匹配社区';
+    if (!groups.has(community)) groups.set(community, []);
+    groups.get(community)!.push(row);
+  }
+
+  const workbook = XLSX.utils.book_new();
+
+  // 为每个社区创建一个工作表
+  for (const [community, rows] of groups.entries()) {
+    // 保持列顺序一致
+    const orderedRows = rows.map(r => ({
+      '当前使用人': r['当前使用人'] || '',
+      '组长': r['组长'] || '',
+      '社区': r['社区'] || '',
+      '时间范围': r['时间范围'] || '',
+      '1小时回复率': r['1小时回复率'] ?? r['1小时超时率'] ?? '',
+      '留资量': r['留资量'] ?? 0,
+      '开口量': r['开口量'] ?? 0,
+      '发布量': r['发布量'] ?? 0,
+      '笔记曝光': r['笔记曝光'] ?? 0,
+      '笔记点击': r['笔记点击'] ?? 0,
+      '违规状态': r['违规状态'] || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(orderedRows);
+    // 列宽
+    worksheet['!cols'] = [
+      { wch: 14 }, // 当前使用人
+      { wch: 12 }, // 组长
+      { wch: 12 }, // 社区
+      { wch: 20 }, // 时间范围
+      { wch: 14 }, // 1小时回复率
+      { wch: 10 }, // 留资量
+      { wch: 10 }, // 开口量
+      { wch: 10 }, // 发布量
+      { wch: 12 }, // 笔记曝光
+      { wch: 12 }, // 笔记点击
+      { wch: 12 }  // 违规状态
+    ];
+
+    // Excel Sheet 名称最长31字符，进行简单裁剪
+    let sheetName = community.replace(/[\\/:*?\[\]]/g, ' ');
+    if (sheetName.length > 31) sheetName = sheetName.slice(0, 31);
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || '未匹配社区');
+  }
+
+  // 生成文件名
+  let fileName = `员工周报_按社区_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`;
+  if (options?.start_date && options?.end_date) {
+    fileName += `_${options.start_date}_${options.end_date}`;
+  }
+  fileName += '.xlsx';
+
+  XLSX.writeFile(workbook, fileName);
+  return fileName;
+};
+
+// 员工周报（每社区单文件-分表导出）
+export const downloadWeeklyReportSplitFilesByCommunity = (
+  weeklyRows: Array<Record<string, any>>,
+  options?: { start_date?: string; end_date?: string }
+) => {
+  const groups = new Map<string, Record<string, any>[]>();
+
+  for (const row of weeklyRows) {
+    const community = (row['社区'] && String(row['社区']).trim()) || '未匹配社区';
+    if (!groups.has(community)) groups.set(community, []);
+    groups.get(community)!.push(row);
+  }
+
+  const fileNames: string[] = [];
+
+  for (const [community, rows] of groups.entries()) {
+    const orderedRows = rows.map(r => ({
+      '当前使用人': r['当前使用人'] || '',
+      '组长': r['组长'] || '',
+      '社区': r['社区'] || '',
+      '时间范围': r['时间范围'] || '',
+      '1小时回复率': r['1小时回复率'] ?? r['1小时超时率'] ?? '',
+      '留资量': r['留资量'] ?? 0,
+      '开口量': r['开口量'] ?? 0,
+      '发布量': r['发布量'] ?? 0,
+      '笔记曝光': r['笔记曝光'] ?? 0,
+      '笔记点击': r['笔记点击'] ?? 0,
+      '违规状态': r['违规状态'] || ''
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(orderedRows);
+    worksheet['!cols'] = [
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, worksheet, '周报');
+
+    let safeCommunity = community.replace(/[\\/:*?\[\]]/g, ' ');
+    if (safeCommunity.length > 60) safeCommunity = safeCommunity.slice(0, 60);
+
+    let fileName = `员工周报_${safeCommunity}_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`;
+    if (options?.start_date && options?.end_date) {
+      fileName += `_${options.start_date}_${options.end_date}`;
+    }
+    fileName += '.xlsx';
+
+    XLSX.writeFile(workbook, fileName);
+    fileNames.push(fileName);
+  }
+
+  return fileNames;
+};
+
+// 构建周报文件（每社区一个内存文件，用于上传到Webhook），返回 ArrayBuffer，供前端上传
+export const buildWeeklyReportFilesByCommunity = (
+  weeklyRows: Array<Record<string, any>>,
+  options?: { start_date?: string; end_date?: string }
+): Array<{ community: string; fileName: string; arrayBuffer: ArrayBuffer }> => {
+  const groups = new Map<string, Record<string, any>[]>();
+
+  for (const row of weeklyRows) {
+    const community = (row['社区'] && String(row['社区']).trim()) || '未匹配社区';
+    if (!groups.has(community)) groups.set(community, []);
+    groups.get(community)!.push(row);
+  }
+
+  const files: Array<{ community: string; fileName: string; arrayBuffer: ArrayBuffer }> = [];
+
+  for (const [community, rows] of groups.entries()) {
+    const orderedRows = rows.map(r => ({
+      '当前使用人': r['当前使用人'] || '',
+      '组长': r['组长'] || '',
+      '社区': r['社区'] || '',
+      '时间范围': r['时间范围'] || '',
+      '1小时回复率': r['1小时回复率'] ?? r['1小时超时率'] ?? '',
+      '留资量': r['留资量'] ?? 0,
+      '开口量': r['开口量'] ?? 0,
+      '发布量': r['发布量'] ?? 0,
+      '笔记曝光': r['笔记曝光'] ?? 0,
+      '笔记点击': r['笔记点击'] ?? 0,
+      '违规状态': r['违规状态'] || ''
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(orderedRows);
+    worksheet['!cols'] = [
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, worksheet, '周报');
+
+    let safeCommunity = community.replace(/[\\/:*?\[\]]/g, ' ');
+    if (safeCommunity.length > 60) safeCommunity = safeCommunity.slice(0, 60);
+
+    let fileName = `员工周报_${safeCommunity}_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`;
+    if (options?.start_date && options?.end_date) {
+      fileName += `_${options.start_date}_${options.end_date}`;
+    }
+    fileName += '.xlsx';
+
+    const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    files.push({ community, fileName, arrayBuffer });
+  }
+
+  return files;
+};

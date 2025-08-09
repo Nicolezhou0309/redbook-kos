@@ -42,7 +42,8 @@ import { employeeNotesApi } from '../lib/employeeNotesApi'
 import { disciplinaryRecordApi } from '../lib/disciplinaryRecordApi'
 import type { EmployeeNotesData } from '../types/employee'
 import type { DisciplinaryRecordForm } from '../types/employee'
-import { downloadEmployeeSimpleJoinData as downloadExcelData } from '../utils/employeeExcelUtils'
+import { downloadEmployeeSimpleJoinData as downloadExcelData, downloadWeeklyReportByCommunity, downloadWeeklyReportSplitFilesByCommunity, buildWeeklyReportFilesByCommunity } from '../utils/employeeExcelUtils'
+import { employeeRosterApi } from '../lib/employeeRosterApi'
 import UltimateImportModal from '../components/UltimateImportModal'
 
 /**
@@ -105,6 +106,9 @@ const EmployeeSimpleJoin: React.FC = () => {
   const [downloadModalVisible, setDownloadModalVisible] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [downloadForm] = Form.useForm()
+  const [exportingWeekly, setExportingWeekly] = useState(false)
+  const [exportingWeeklySplit, setExportingWeeklySplit] = useState(false)
+  const [sendingWeCom, setSendingWeCom] = useState(false)
   
   // 批量上传相关状态
   const [importModalVisible, setImportModalVisible] = useState(false)
@@ -350,6 +354,271 @@ const EmployeeSimpleJoin: React.FC = () => {
       message.error('发放黄牌失败，请重试')
     } finally {
       setIssuingYellowCard(false)
+    }
+  }
+
+  // 生成“违规状态”文本
+  const getViolationStatusText = (record: EmployeeSimpleJoinData) => {
+    const yellowCardStatus = getYellowCardStatus(record)
+    if (yellowCardStatus.status === 'not_set') return '未设置'
+    if (yellowCardStatus.status === 'normal') return '正常'
+    if (yellowCardStatus.status === 'both') return '回复率/发布量'
+    if (yellowCardStatus.status === 'timeout') return '回复率'
+    if (yellowCardStatus.status === 'notes') return '发布量'
+    return '正常'
+  }
+
+  // 导出周报（按社区分表）
+  const handleExportWeeklyByCommunity = async () => {
+    try {
+      setExportingWeekly(true)
+
+      // 拉取当前筛选条件下的全量数据
+      const fullResult = await downloadEmployeeSimpleJoinData(filters, sortField, sortOrder)
+      if (!fullResult.success || !fullResult.data) {
+        message.error(fullResult.error || '获取数据失败')
+        return
+      }
+
+      // 加载花名册，用于匹配组长/社区
+      const roster = await employeeRosterApi.getAll()
+      // 建立员工姓名 -> roster 的索引（若同名，以第一个为准）
+      const nameToRoster = new Map<string, typeof roster[number]>()
+      for (const r of roster) {
+        if (r.employee_name) {
+          const key = r.employee_name.trim()
+          if (!nameToRoster.has(key)) nameToRoster.set(key, r)
+        }
+      }
+
+      // 组装周报行
+      const weeklyRows = fullResult.data.map(rec => {
+        const rosterMatch = nameToRoster.get((rec.employee_name || '').trim())
+        const manager = rosterMatch?.manager || ''
+        const community = rosterMatch?.community || '未匹配社区'
+
+        // 时间范围（互动时间范围）
+        let timeRangeText = '-'
+        if (rec.time_range) {
+          if (rec.time_range.remark && rec.time_range.remark.trim() !== '') {
+            timeRangeText = rec.time_range.remark
+          } else if (rec.time_range.start_date && rec.time_range.end_date) {
+            timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
+          }
+        }
+
+        // 1小时回复率：取 rate_1hour_timeout 字段展示
+        const oneHourRate = rec.rate_1hour_timeout || ''
+
+        return {
+          '当前使用人': rec.employee_name || '',
+          '组长': manager,
+          '社区': community,
+          '时间范围': timeRangeText,
+          '1小时回复率': oneHourRate,
+          '留资量': rec.total_private_message_leads_kept || 0,
+          '开口量': rec.total_private_message_openings || 0,
+          '发布量': rec.published_notes_count || 0,
+          '笔记曝光': rec.notes_exposure_count || 0,
+          '笔记点击': rec.notes_click_count || 0,
+          '违规状态': getViolationStatusText(rec)
+        }
+      })
+
+      const fileName = downloadWeeklyReportByCommunity(weeklyRows, {
+        start_date: filters.start_date,
+        end_date: filters.end_date
+      })
+
+      message.success(`周报已导出：${fileName}`)
+    } catch (e) {
+      console.error(e)
+      message.error('导出周报失败')
+    } finally {
+      setExportingWeekly(false)
+    }
+  }
+
+  // 导出周报（每社区单文件-分表）
+  const handleExportWeeklySplitFilesByCommunity = async () => {
+    try {
+      setExportingWeeklySplit(true)
+
+      const fullResult = await downloadEmployeeSimpleJoinData(filters, sortField, sortOrder)
+      if (!fullResult.success || !fullResult.data) {
+        message.error(fullResult.error || '获取数据失败')
+        return
+      }
+
+      const roster = await employeeRosterApi.getAll()
+      const nameToRoster = new Map<string, typeof roster[number]>()
+      for (const r of roster) {
+        if (r.employee_name) {
+          const key = r.employee_name.trim()
+          if (!nameToRoster.has(key)) nameToRoster.set(key, r)
+        }
+      }
+
+      const weeklyRows = fullResult.data.map(rec => {
+        const rosterMatch = nameToRoster.get((rec.employee_name || '').trim())
+        const manager = rosterMatch?.manager || ''
+        const community = rosterMatch?.community || '未匹配社区'
+
+        let timeRangeText = '-'
+        if (rec.time_range) {
+          if (rec.time_range.remark && rec.time_range.remark.trim() !== '') {
+            timeRangeText = rec.time_range.remark
+          } else if (rec.time_range.start_date && rec.time_range.end_date) {
+            timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
+          }
+        }
+
+        const oneHourRate = rec.rate_1hour_timeout || ''
+
+        return {
+          '当前使用人': rec.employee_name || '',
+          '组长': manager,
+          '社区': community,
+          '时间范围': timeRangeText,
+          '1小时回复率': oneHourRate,
+          '留资量': rec.total_private_message_leads_kept || 0,
+          '开口量': rec.total_private_message_openings || 0,
+          '发布量': rec.published_notes_count || 0,
+          '笔记曝光': rec.notes_exposure_count || 0,
+          '笔记点击': rec.notes_click_count || 0,
+          '违规状态': getViolationStatusText(rec)
+        }
+      })
+
+      const fileNames = downloadWeeklyReportSplitFilesByCommunity(weeklyRows, {
+        start_date: filters.start_date,
+        end_date: filters.end_date
+      })
+      message.success(`已导出 ${fileNames.length} 个社区周报文件`)
+    } catch (e) {
+      console.error(e)
+      message.error('导出周报失败')
+    } finally {
+      setExportingWeeklySplit(false)
+    }
+  }
+
+  // 发送周报到企业微信（分社区文件）
+  const handleSendWeeklyToWeCom = async () => {
+    const WEBHOOK_KEY = 'e9be8161-5ed4-48b2-9823-e17d896efed7'
+    const UPLOAD_URL = `/api/wecom/webhook-upload`
+    const SEND_URL = `/api/wecom/webhook-send`
+
+    try {
+      setSendingWeCom(true)
+
+      // 拉取全量数据
+      const fullResult = await downloadEmployeeSimpleJoinData(filters, sortField, sortOrder)
+      if (!fullResult.success || !fullResult.data) {
+        message.error(fullResult.error || '获取数据失败')
+        return
+      }
+
+      // 花名册索引
+      const roster = await employeeRosterApi.getAll()
+      const nameToRoster = new Map<string, typeof roster[number]>()
+      for (const r of roster) {
+        if (r.employee_name) {
+          const key = r.employee_name.trim()
+          if (!nameToRoster.has(key)) nameToRoster.set(key, r)
+        }
+      }
+
+      // 组装周报行
+      const weeklyRows = fullResult.data.map(rec => {
+        const rosterMatch = nameToRoster.get((rec.employee_name || '').trim())
+        const manager = rosterMatch?.manager || ''
+        const community = rosterMatch?.community || '未匹配社区'
+
+        let timeRangeText = '-'
+        if (rec.time_range) {
+          if (rec.time_range.remark && rec.time_range.remark.trim() !== '') {
+            timeRangeText = rec.time_range.remark
+          } else if (rec.time_range.start_date && rec.time_range.end_date) {
+            timeRangeText = `${rec.time_range.start_date} ~ ${rec.time_range.end_date}`
+          }
+        }
+
+        const oneHourRate = rec.rate_1hour_timeout || ''
+
+        return {
+          '当前使用人': rec.employee_name || '',
+          '组长': manager,
+          '社区': community,
+          '时间范围': timeRangeText,
+          '1小时回复率': oneHourRate,
+          '留资量': rec.total_private_message_leads_kept || 0,
+          '开口量': rec.total_private_message_openings || 0,
+          '发布量': rec.published_notes_count || 0,
+          '笔记曝光': rec.notes_exposure_count || 0,
+          '笔记点击': rec.notes_click_count || 0,
+          '违规状态': getViolationStatusText(rec)
+        }
+      })
+
+      // 构建内存文件
+      const files = buildWeeklyReportFilesByCommunity(weeklyRows, {
+        start_date: filters.start_date,
+        end_date: filters.end_date
+      })
+
+      if (files.length === 0) {
+        message.info('无可发送的数据')
+        return
+      }
+
+      // 顺序上传与发送
+      let successCount = 0
+      for (const f of files) {
+        // 通过API代理上传
+        const contentBase64 = btoa(String.fromCharCode(...new Uint8Array(f.arrayBuffer)))
+        const upResp = await fetch(UPLOAD_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: WEBHOOK_KEY, fileName: f.fileName, contentBase64 })
+        })
+        if (!upResp.ok) {
+          console.error('上传失败 HTTP:', upResp.status, upResp.statusText)
+          continue
+        }
+        const upData = await upResp.json()
+        if (upData.errcode !== 0 || !upData.media_id) {
+          console.error('上传失败:', upData)
+          continue
+        }
+
+        const sendResp = await fetch(SEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: WEBHOOK_KEY, media_id: upData.media_id })
+        })
+        if (!sendResp.ok) {
+          console.error('发送失败 HTTP:', sendResp.status, sendResp.statusText)
+          continue
+        }
+        const sendData = await sendResp.json()
+        if (sendData.errcode === 0) {
+          successCount++
+        } else {
+          console.error('发送失败:', sendData)
+        }
+      }
+
+      if (successCount > 0) {
+        message.success(`已发送 ${successCount}/${files.length} 个社区周报到企业微信`)
+      } else {
+        message.error('发送失败，请检查Webhook配置或浏览器网络限制')
+      }
+    } catch (e) {
+      console.error(e)
+      message.error('发送到企业微信失败')
+    } finally {
+      setSendingWeCom(false)
     }
   }
 
@@ -1107,6 +1376,39 @@ const EmployeeSimpleJoin: React.FC = () => {
                         onClick: () => setDownloadModalVisible(true)
                       },
                       {
+                        key: 'weekly_report',
+                        label: (
+                          <Tooltip title="根据页面筛选结果分社区导出，导出前请先检查数据">
+                            <span>导出周报(整合版)</span>
+                          </Tooltip>
+                        ),
+                        icon: <DownloadOutlined />,
+                        onClick: handleExportWeeklyByCommunity,
+                        disabled: exportingWeekly
+                      },
+                      {
+                        key: 'weekly_report_split',
+                        label: (
+                          <Tooltip title="根据页面筛选结果分社区导出，导出前请先检查数据">
+                            <span>导出周报(分社区版)</span>
+                          </Tooltip>
+                        ),
+                        icon: <DownloadOutlined />,
+                        onClick: handleExportWeeklySplitFilesByCommunity,
+                        disabled: exportingWeeklySplit
+                      },
+                      {
+                        key: 'send_wecom',
+                        label: (
+                          <Tooltip title="将分社区的周报文件上传并发送到企业微信群机器人">
+                            <span>发送周报到企业微信(分社区)</span>
+                          </Tooltip>
+                        ),
+                        icon: <DownloadOutlined />,
+                        onClick: handleSendWeeklyToWeCom,
+                        disabled: sendingWeCom
+                      },
+                      {
                         key: 'upload',
                         label: '批量上传',
                         icon: <UploadOutlined />,
@@ -1116,8 +1418,10 @@ const EmployeeSimpleJoin: React.FC = () => {
                   }}
                   placement="bottomRight"
                 >
-                  <Button icon={<MoreOutlined />}>
-                  </Button>
+                  <Tooltip title="根据页面筛选结果分社区导出，导出前请先检查数据">
+                    <Button icon={<MoreOutlined />} loading={exportingWeekly || exportingWeeklySplit}>
+                    </Button>
+                  </Tooltip>
                 </Dropdown>
               </Space>
           </Col>

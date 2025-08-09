@@ -9,6 +9,7 @@ import {
   ExclamationCircleOutlined,
   MessageOutlined,
   LogoutOutlined,
+  IdcardOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -88,9 +89,21 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       label: '红黄牌记录',
     },
     {
-      key: '/employee-manage',
+      key: 'account-manage',
       icon: <TeamOutlined />,
-      label: '员工管理',
+      label: '账号管理',
+      children: [
+        {
+          key: '/employee-manage',
+          icon: <TeamOutlined />,
+          label: '账号管理',
+        },
+        {
+          key: '/employee-roster',
+          icon: <IdcardOutlined />,
+          label: '人员花名册',
+        },
+      ],
     },
     {
       key: 'notification',

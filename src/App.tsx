@@ -14,6 +14,7 @@ import EmployeeManage from './pages/EmployeeManage';
 import DisciplinaryRecord from './pages/DisciplinaryRecord';
 import MessageTest from './pages/MessageTest';
 import NotificationTest from './pages/NotificationTest';
+import EmployeeRoster from './pages/EmployeeRoster';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
               <Route path="employee-notes" element={<EmployeeNotes />} />
               <Route path="employee-simple-join" element={<EmployeeSimpleJoin />} />
               <Route path="employee-manage" element={<EmployeeManage />} />
+              <Route path="employee-roster" element={<EmployeeRoster />} />
               <Route path="disciplinary-record" element={<DisciplinaryRecord />} />
               <Route path="message-test" element={<MessageTest />} />
               <Route path="notification-test" element={<NotificationTest />} />
