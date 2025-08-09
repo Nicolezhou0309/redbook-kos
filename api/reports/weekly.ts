@@ -99,9 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = new Date()
     const ymd = now.toISOString().slice(0, 10)
     const safe = (s: string) => s.replace(/[\\/:*?"<>|\n\r]/g, ' ').slice(0, 80)
-    const folder = `weekly_reports/${ymd}`
     const objectName = `${safe(community)}_小红书专业号数据_${ymd}.xlsx`
-    const path = `${folder}/${objectName}`
+    const path = objectName
 
     const uploadRes = await supabase.storage.from(bucket).upload(path, Buffer.from(target.arrayBuffer), {
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
