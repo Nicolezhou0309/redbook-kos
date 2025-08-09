@@ -60,9 +60,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
     const community = (req.query.community as string) || '未匹配社区'
+    const debug = String(req.query.debug || '').toLowerCase() === '1' || String(req.query.debug || '').toLowerCase() === 'true'
+    const maxParam = parseInt(String(req.query.max || '').trim(), 10)
+    const pageSizeOverride = Number.isFinite(maxParam) && maxParam > 0 ? Math.min(maxParam, 5000) : undefined
     const filtersB64 = (req.query.filters as string) || ''
 
     const filters = filtersB64 ? JSON.parse(Buffer.from(filtersB64, 'base64').toString('utf-8')) : {}
+
+    // debug: 绕过数据查询与存储，快速验证函数可用与 Excel 生成
+    if (debug) {
+      const demoRows = [
+        { '当前使用人': '示例A', '组长': '张三', '社区': community, '时间范围': '2025-01-01 ~ 2025-01-07', '1小时回复率': '95%', '留资量': 10, '开口量': 20, '发布量': 5, '笔记曝光': 1000, '笔记点击': 100, '违规状态': '' },
+        { '当前使用人': '示例B', '组长': '李四', '社区': community, '时间范围': '2025-01-01 ~ 2025-01-07', '1小时回复率': '90%', '留资量': 8, '开口量': 16, '发布量': 4, '笔记曝光': 800, '笔记点击': 80, '违规状态': '' }
+      ]
+      const target = await buildWeeklyReportOneFile(demoRows, {})
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(target.fileName)}"`)
+      return res.status(200).send(target.buffer)
+    }
 
     // 创建服务端 Supabase 客户端
     const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -133,7 +148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sort_by: 'employee_name',
       sort_direction: 'asc',
       page_number: 1,
-      page_size: 999999
+      page_size: pageSizeOverride || 10000
     }
 
     const { data: joinData, error: joinErr } = await (supabaseSrv as any).rpc('get_employee_join_data', rpcParams)
