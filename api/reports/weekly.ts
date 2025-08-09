@@ -143,10 +143,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 为保持进度，这里简单用 xlsx 组合，但通过已有的打包函数转为 arrayBuffer 再返回 attachment 更稳。
 
     // 动态构建一个文件（仅该社区）
-    const { buildWeeklyReportFilesByCommunity } = await import('../../src/utils/employeeExcelUtils')
-    const files = buildWeeklyReportFilesByCommunity(weeklyRows, { start_date: filters.start_date, end_date: filters.end_date })
-    const target = files.find(f => (f.fileName.includes(community) || community === '未匹配社区')) || files[0]
-    if (!target) return res.status(404).json({ error: '无该社区数据' })
+    // 使用 API 目录下的共享 Node 版本工具，避免跨目录 TS 动态导入导致的打包/运行时错误
+    const { buildWeeklyReportOneFile } = await import('../_shared/excel.js')
+    const target = buildWeeklyReportOneFile(weeklyRows, { start_date: filters.start_date, end_date: filters.end_date })
 
     const persist = String(req.query.persist || '').toLowerCase() === '1' || String(req.query.persist || '').toLowerCase() === 'true'
     if (!persist) {
