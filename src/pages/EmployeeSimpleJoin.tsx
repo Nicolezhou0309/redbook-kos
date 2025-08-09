@@ -111,6 +111,8 @@ const EmployeeSimpleJoin: React.FC = () => {
   const [sendingWeCom, setSendingWeCom] = useState(false)
   const [wecomPreviewVisible, setWecomPreviewVisible] = useState(false)
   const [wecomPreviewMessages, setWecomPreviewMessages] = useState<string[]>([])
+  const [wecomHeader, setWecomHeader] = useState('')
+  const [wecomLinkChunks, setWecomLinkChunks] = useState<string[]>([])
   const [wecomPreviewLoading, setWecomPreviewLoading] = useState(false)
   
   // 批量上传相关状态
@@ -620,15 +622,18 @@ const EmployeeSimpleJoin: React.FC = () => {
         const rate = s.total > 0 ? ((s.violated / s.total) * 100).toFixed(1) + '%' : '0%'
         return `${comm}：总账号数${s.total}个，违规${s.violated}个，违规率${rate}`
       }).join('\n')
-      // 组装预览消息，每条最多15个链接
+      // 组装预览：可编辑头部 + 链接分段
       const chunkSize = 15
-      const messages: string[] = []
+      const header = `本周小红书员工号运营情况：\n${overviewLines}`
+      const linkChunks: string[] = []
       for (let i = 0; i < links.length; i += chunkSize) {
         const chunk = links.slice(i, i + chunkSize)
         const mdLines = chunk.map(({ title, url }) => `- [${title}](${url})`).join('\n')
-        const content = `本周小红书员工号运营情况：\n${overviewLines}\n\n周报数据下载：\n${mdLines}`
-        messages.push(content)
+        linkChunks.push(mdLines)
       }
+      const messages = linkChunks.map(lines => `${header}\n\n周报数据下载：\n${lines}`)
+      setWecomHeader(header)
+      setWecomLinkChunks(linkChunks)
       setWecomPreviewMessages(messages)
       setWecomPreviewVisible(true)
     } catch (e) {
@@ -1519,7 +1524,9 @@ const EmployeeSimpleJoin: React.FC = () => {
           try {
             setWecomPreviewLoading(true)
             let sent = 0
-            for (const content of wecomPreviewMessages) {
+            // 发送时，用当前 header 与每段链接组合，确保用户编辑后的头部生效
+            const messagesToSend = wecomLinkChunks.map(lines => `${wecomHeader}\n\n周报数据下载：\n${lines}`)
+            for (const content of messagesToSend) {
               const sendResp = await fetch(SEND_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1530,7 +1537,7 @@ const EmployeeSimpleJoin: React.FC = () => {
               if (sendData.errcode === 0) sent++
             }
             setWecomPreviewVisible(false)
-            if (sent > 0) message.success(`企业微信已发送 ${sent} 条消息（共 ${wecomPreviewMessages.length} 条）`)
+            if (sent > 0) message.success(`企业微信已发送 ${sent} 条消息（共 ${wecomLinkChunks.length} 条）`)
             else message.error('发送失败，请检查Webhook配置')
           } catch (e) {
             console.error(e)
@@ -1543,14 +1550,21 @@ const EmployeeSimpleJoin: React.FC = () => {
         okButtonProps={{ loading: wecomPreviewLoading }}
         width={800}
       >
-        <div style={{ maxHeight: 400, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 13 }}>
-          {wecomPreviewMessages.map((msg, idx) => (
-            <div key={idx} style={{ marginBottom: 16 }}>
-              <div style={{ color: '#999', marginBottom: 8 }}>第 {idx + 1} 条消息预览</div>
-              <pre style={{ margin: 0 }}>{msg}</pre>
+        <div style={{ maxHeight: 420, overflow: 'auto' }}>
+          <div style={{ marginBottom: 12, color: '#999' }}>可编辑以下“统计概览”部分；下方链接列表不支持编辑。</div>
+          <Input.TextArea
+            value={wecomHeader}
+            onChange={(e) => setWecomHeader(e.target.value)}
+            autoSize={{ minRows: 4, maxRows: 8 }}
+            style={{ fontFamily: 'monospace' }}
+          />
+          {wecomLinkChunks.map((lines, idx) => (
+            <div key={idx} style={{ marginTop: 16 }}>
+              <div style={{ color: '#999', marginBottom: 6 }}>第 {idx + 1} 条消息 - 链接预览</div>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 13 }}>{`周报数据下载：\n${lines}`}</pre>
             </div>
           ))}
-          {wecomPreviewMessages.length === 0 && <div>暂无内容</div>}
+          {wecomLinkChunks.length === 0 && <div>暂无内容</div>}
         </div>
       </Modal>
 
