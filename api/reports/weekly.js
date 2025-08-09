@@ -292,12 +292,17 @@ export default async function handler(req, res) {
     }
 
     let url = null
+    const downloadName = buildFileNameDisplay(community, filters)
     try {
-      const { data, error } = await supabaseSrv.storage.from(bucket).createSignedUrl(path, 60 * 60 * 24 * 7)
+      const { data, error } = await supabaseSrv.storage.from(bucket).createSignedUrl(
+        path,
+        60 * 60 * 24 * 7,
+        { download: downloadName }
+      )
       if (error) throw error
       url = (data && data.signedUrl) || null
     } catch (_) {
-      const { data } = supabaseSrv.storage.from(bucket).getPublicUrl(path)
+      const { data } = supabaseSrv.storage.from(bucket).getPublicUrl(path, { download: downloadName })
       url = (data && data.publicUrl) || null
     }
     if (!url) return res.status(500).json({ error: 'Failed to generate download URL' })
