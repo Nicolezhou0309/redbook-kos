@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { downloadWeeklyReportSplitFilesByCommunity } from '../../src/utils/employeeExcelUtils'
 import { employeeRosterApi } from '../../src/lib/employeeRosterApi'
 import { downloadEmployeeSimpleJoinData } from '../../src/lib/employeeSimpleJoinApi'
+import { createClient } from '@supabase/supabase-js'
 
 // 注意：此函数直接调用前端代码会引入浏览器依赖，严格生产建议复制所需逻辑到此处。
 // 为快速实现，保持最小调用路径：接受 filters/yellowCardSettings，生成单社区文件。
@@ -74,9 +74,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const target = files.find(f => (f.fileName.includes(community) || community === '未匹配社区')) || files[0]
     if (!target) return res.status(404).json({ error: '无该社区数据' })
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(target.fileName)}"`)
-    return res.status(200).send(Buffer.from(target.arrayBuffer))
+    const persist = String(req.query.persist || '').toLowerCase() === '1' || String(req.query.persist || '').toLowerCase() === 'true'
+    if (!persist) {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(target.fileName)}"`)
+      return res.status(200).send(Buffer.from(target.arrayBuffer))
+    }
+
+    // 持久化到 Supabase Storage
+    const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+    if (!SUPABASE_URL || !SERVICE_KEY) {
+      return res.status(500).json({ error: 'Missing SUPABASE_URL or service/anon key env' })
+    }
+
+    const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
+    const bucket = process.env.REPORTS_BUCKET || 'weekly-reports'
+
+    // 尝试创建 bucket（需要 service key）。失败忽略（可能已存在）
+    try {
+      await (supabase as any).storage.createBucket(bucket, { public: true })
+    } catch (_) {}
+
+    const now = new Date()
+    const ymd = now.toISOString().slice(0, 10)
+    const safe = (s: string) => s.replace(/[\\/:*?"<>|\n\r]/g, ' ').slice(0, 80)
+    const folder = `weekly_reports/${ymd}`
+    const objectName = `${safe(community)}_小红书专业号数据_${ymd}.xlsx`
+    const path = `${folder}/${objectName}`
+
+    const uploadRes = await supabase.storage.from(bucket).upload(path, Buffer.from(target.arrayBuffer), {
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      upsert: true
+    })
+    if (uploadRes.error) {
+      return res.status(500).json({ error: `Upload failed: ${uploadRes.error.message}` })
+    }
+
+    // 生成 7 天有效的签名链接；若失败则尝试 publicURL
+    let url: string | null = null
+    try {
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60 * 24 * 7)
+      if (error) throw error
+      url = data?.signedUrl || null
+    } catch (_) {
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+      url = data.publicUrl || null
+    }
+
+    if (!url) {
+      return res.status(500).json({ error: 'Failed to generate download URL' })
+    }
+
+    // 重定向到下载链接
+    res.status(302).setHeader('Location', url)
+    return res.end()
   } catch (e) {
     console.error('[weekly] error:', e)
     return res.status(500).json({ error: e instanceof Error ? e.message : 'Unknown error' })
