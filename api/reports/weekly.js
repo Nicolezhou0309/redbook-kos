@@ -8,12 +8,16 @@ export default async function handler(req, res) {
 
     const communityRaw = String(req.query.community || '').trim()
     const split = String(req.query.split || '').toLowerCase() === '1' || String(req.query.split || '').toLowerCase() === 'true'
+    const communitiesParam = String(req.query.communities || '').trim()
     const normalizeCommunityName = (name) => {
       const n = String(name || '').replace(/小红书专业号数据/g, '').trim()
       return n
     }
     const isUnmatched = (name) => /未匹配/.test(String(name || ''))
     const community = normalizeCommunityName(communityRaw) // 为空表示不过滤社区
+    const communitiesAllow = communitiesParam
+      ? communitiesParam.split(',').map(s => normalizeCommunityName(s.trim())).filter(Boolean)
+      : []
     const debug = String(req.query.debug || '').toLowerCase() === '1' || String(req.query.debug || '').toLowerCase() === 'true'
     const maxParam = parseInt(String(req.query.max || '').trim(), 10)
     const pageSizeOverride = Number.isFinite(maxParam) && maxParam > 0 ? Math.min(maxParam, 5000) : undefined
@@ -161,7 +165,8 @@ export default async function handler(req, res) {
       .map((rec) => {
         const rosterMatch = nameToRoster.get(String(rec.employee_name || '').trim())
         const manager = (rosterMatch && rosterMatch.manager) || ''
-        const comm = (rosterMatch && rosterMatch.community) || '未匹配社区'
+        const commRaw = (rosterMatch && rosterMatch.community) || '未匹配社区'
+        const comm = normalizeCommunityName(commRaw)
 
         let timeRangeText = '-'
         if (rec && rec.time_range) {
@@ -185,8 +190,14 @@ export default async function handler(req, res) {
           '违规状态': '',
         }
       })
-      // 永久排除未匹配社区；若指定 community，则只保留该社区
-      .filter((r) => r['社区'] && !isUnmatched(r['社区']) && (!community || r['社区'] === community))
+      // 永久排除未匹配社区；若指定 community/communities，则按名单过滤
+      .filter((r) => {
+        const comm = r['社区']
+        if (!comm || isUnmatched(comm)) return false
+        if (communitiesAllow.length > 0) return communitiesAllow.includes(comm)
+        if (community) return comm === community
+        return true
+      })
 
     if (!weeklyRows.length) {
       return res.status(404).json({ error: '无该社区数据或均为未匹配社区，未返回记录' })
