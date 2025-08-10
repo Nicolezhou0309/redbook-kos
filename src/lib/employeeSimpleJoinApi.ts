@@ -2,6 +2,9 @@ import { supabase } from './supabase'
 
 // 定义简化版join数据的类型
 export interface EmployeeSimpleJoinData {
+  // 内部唯一标识符，用于React key，允许 employee_id 重复
+  _unique_id?: string
+  
   // 员工基本信息
   employee_id: string
   employee_name: string
@@ -304,14 +307,10 @@ export const getEmployeeSimpleJoinData = async (
     const resultData = data || []
     let totalCount = 0
 
-    // 从最后一行获取总计数
+    // 获取总计数（所有行都包含相同的total_count）
     if (resultData.length > 0) {
-      const lastRow = resultData[resultData.length - 1]
-      if (lastRow.total_count) {
-        totalCount = lastRow.total_count
-        // 移除包含总计数的行
-        resultData.pop()
-      }
+      totalCount = resultData[0].total_count || 0
+      // 不需要移除任何行，因为所有行都是真实数据
     }
 
     return {
@@ -506,14 +505,10 @@ export const downloadEmployeeSimpleJoinData = async (
     const resultData = data || []
     let totalCount = 0
 
-    // 从最后一行获取总计数
+    // 获取总计数（所有行都包含相同的total_count）
     if (resultData.length > 0) {
-      const lastRow = resultData[resultData.length - 1]
-      if (lastRow.total_count) {
-        totalCount = lastRow.total_count
-        // 移除包含总计数的行
-        resultData.pop()
-      }
+      totalCount = resultData[0].total_count || 0
+      // 不需要移除任何行，因为所有行都是真实数据
     }
 
     return {

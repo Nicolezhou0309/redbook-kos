@@ -669,6 +669,15 @@ const EmployeeSimpleJoin: React.FC = () => {
       const validPage = Math.max(1, pagination?.current || 1)
       const validPageSize = [20, 50, 100].includes(pagination?.pageSize || 20) ? pagination.pageSize : 20
       
+      // 添加详细的调试日志
+      console.log('🚀 开始加载数据 ====================')
+      console.log('🔍 筛选条件:', filters)
+      console.log('📝 搜索查询:', searchQuery)
+      console.log('📅 时间范围筛选:', timeRangeFilter)
+      console.log('🔄 排序字段:', sortField, '排序方向:', sortOrder)
+      console.log('📊 分页参数:', { page: validPage, pageSize: validPageSize })
+      console.log('📊 当前分页状态:', pagination)
+      
       const result = await getEmployeeSimpleJoinData(
         filters,
         sortField,
@@ -676,12 +685,18 @@ const EmployeeSimpleJoin: React.FC = () => {
         { page: validPage, pageSize: validPageSize }
       )
       
+      console.log('✅ API调用结果:', result)
+      
       if (result.success) {
         // 确保数据是数组且每个元素都有必要的属性
         const safeData = (result.data || []).map((item: any, index: number) => {
           try {
             return {
               ...item,
+              // 为每条记录生成一个真正唯一的内部ID，用于React key
+              // 使用 index 确保即使数据完全相同也能区分
+              _unique_id: `row_${index}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              // 保持原有的 employee_id，允许重复
               employee_id: item?.employee_id || `temp_${Date.now()}_${index}`,
               employee_uid: item?.employee_uid || `uid_${Date.now()}_${index}`,
               employee_name: item?.employee_name || '未知',
@@ -704,6 +719,7 @@ const EmployeeSimpleJoin: React.FC = () => {
           } catch (itemError) {
             console.warn('处理数据项时出错:', itemError, item)
             return {
+              _unique_id: `error_${index}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               employee_id: `error_${Date.now()}_${index}`,
               employee_uid: `error_uid_${Date.now()}_${index}`,
               employee_name: '数据错误',
@@ -711,26 +727,39 @@ const EmployeeSimpleJoin: React.FC = () => {
             }
           }
         })
+
+        // 允许 employee_id 重复，不进行去重处理
+        const finalData = safeData
         
-        setData(safeData)
+        console.log('📊 处理后的数据:', finalData)
+        console.log('📊 数据总数:', result.total)
+        
+        // 更新数据和分页状态
+        setData(finalData)
         setPagination(prev => ({
           ...prev,
           current: validPage,
           pageSize: validPageSize,
           total: result.total || 0
         }))
+        
         // 数据加载后清除选择
         clearSelection()
+        
+        console.log('✅ 数据加载完成，共', finalData.length, '条记录')
       } else {
+        console.error('❌ API调用失败:', result.error)
         message.error(result.error || '加载数据失败')
         setData([])
         setPagination(prev => ({ ...prev, total: 0 }))
+        clearSelection()
       }
     } catch (error) {
-      console.error('加载数据时发生错误:', error)
+      console.error('❌ 加载数据时发生错误:', error)
       message.error('加载数据时发生错误')
       setData([])
       setPagination(prev => ({ ...prev, total: 0 }))
+      clearSelection()
     } finally {
       setLoading(false)
     }
@@ -762,38 +791,97 @@ const EmployeeSimpleJoin: React.FC = () => {
     loadData()
   }, [])
 
+  // 当筛选条件或排序变化时，重置分页并加载数据
   useEffect(() => {
-    loadData()
-  }, [filters, sortField, sortOrder, pagination.current, pagination.pageSize])
+    console.log('🔍 filters 状态变化:', filters)
+    console.log('📊 当前分页状态:', pagination)
+    
+    // 重置分页到第一页
+    setPagination(prev => ({ ...prev, current: 1 }))
+    
+    // 延迟加载数据，确保分页状态已更新
+    setTimeout(() => {
+      loadData()
+    }, 0)
+  }, [filters, sortField, sortOrder])
+  
+  // 当分页变化时加载数据（仅用于手动分页操作）
+  useEffect(() => {
+    // 避免在初始化时重复加载
+    if (pagination.current > 1 || pagination.pageSize !== 20) {
+      loadData()
+    }
+  }, [pagination.current, pagination.pageSize])
 
   // 处理搜索
   const handleSearch = (value: string) => {
-    setSearchQuery(value)
-    setFilters(prev => ({
-      ...prev,
-      search_query: value || undefined
-    }))
-    setPagination(prev => ({ ...prev, current: 1 }))
+    const searchStartTime = Date.now()
+    const trimmedValue = value ? value.trim() : ''
+    
+    console.log('🔍 开始搜索操作 ====================')
+    console.log('📝 搜索输入值:', value)
+    console.log('🧹 清理后搜索值:', trimmedValue)
+    console.log('⏰ 搜索开始时间:', new Date(searchStartTime).toLocaleString())
+    console.log('📊 当前筛选条件:', filters)
+    
+    // 先更新搜索查询状态
+    setSearchQuery(trimmedValue)
+    
+    // 更新筛选条件 - 统一使用 filter_employee_name 字段
+    const newFilters = { ...filters }
+    if (trimmedValue) {
+      newFilters.filter_employee_name = trimmedValue
+      // 清除旧的 search_query 字段，避免冲突
+      delete newFilters.search_query
+    } else {
+      delete newFilters.filter_employee_name
+    }
+    
+    console.log('🔄 新的筛选条件:', newFilters)
+    
+    // 应用新的筛选条件
+    setFilters(newFilters)
+    
+    // 注意：分页重置现在由 useEffect 自动处理
+    // 这样可以确保 filters 状态更新完成后再重置分页
+    
+    // 清除选择状态
+    clearSelection()
   }
 
   // 处理时间范围筛选
   const handleTimeRangeChange = (dates: any) => {
+    const filterStartTime = Date.now()
+    
+    console.log('📅 开始时间范围筛选操作 ====================')
+    console.log('📅 选择的时间范围:', dates)
+    console.log('⏰ 筛选开始时间:', new Date(filterStartTime).toLocaleString())
+    console.log('📊 当前筛选条件:', filters)
+    
+    // 先更新时间范围状态
     setTimeRangeFilter(dates)
+    
+    // 更新筛选条件
+    const newFilters = { ...filters }
     if (dates && dates[0] && dates[1]) {
-      setFilters(prev => ({
-        ...prev,
-        start_date: dates[0].format('YYYY-MM-DD'),
-        end_date: dates[1].format('YYYY-MM-DD')
-      }))
+      const startDate = dates[0].format('YYYY-MM-DD')
+      const endDate = dates[1].format('YYYY-MM-DD')
+      newFilters.start_date = startDate
+      newFilters.end_date = endDate
     } else {
-      setFilters(prev => {
-        const newFilters = { ...prev }
-        delete newFilters.start_date
-        delete newFilters.end_date
-        return newFilters
-      })
+      delete newFilters.start_date
+      delete newFilters.end_date
     }
-    setPagination(prev => ({ ...prev, current: 1 }))
+    
+    
+    // 应用新的筛选条件
+    setFilters(newFilters)
+    
+    // 注意：分页重置现在由 useEffect 自动处理
+    
+    // 清除选择状态
+    clearSelection()
+    
   }
 
   // 保存黄牌判断条件
@@ -827,6 +915,8 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 应用黄牌筛选条件
   const handleApplyYellowCardFilter = (values: any) => {
+    const filterStartTime = Date.now()
+    
     const newFilters: SimpleJoinFilterParams = {}
     
     // 黄牌筛选条件
@@ -840,15 +930,28 @@ const EmployeeSimpleJoin: React.FC = () => {
       newFilters.yellow_card_min_private_message_leads = values.yellow_card_min_private_message_leads
     }
     if (values.yellow_card_date_range) {
-      newFilters.yellow_card_start_date = values.yellow_card_date_range[0]?.format('YYYY-MM-DD')
-      newFilters.yellow_card_end_date = values.yellow_card_date_range[1]?.format('YYYY-MM-DD')
+      const startDate = values.yellow_card_date_range[0]?.format('YYYY-MM-DD')
+      const endDate = values.yellow_card_date_range[1]?.format('YYYY-MM-DD')
+      newFilters.yellow_card_start_date = startDate
+      newFilters.yellow_card_end_date = endDate
     }
 
+
+    // 先更新筛选条件
     setFilters(newFilters)
+    
+    // 重置分页到第一页
     setPagination(prev => ({ ...prev, current: 1 }))
     
+    // 清除选择状态
+    clearSelection()
+    // 关闭弹窗
     setYellowCardModalVisible(false)
+    
+    // 显示成功消息
     message.success('黄牌筛选条件已应用')
+    
+    // 注意：不要在这里直接调用 loadData()，让 useEffect 自动处理
   }
 
   // 应用筛选并保存设置
@@ -859,89 +962,209 @@ const EmployeeSimpleJoin: React.FC = () => {
     handleApplyYellowCardFilter(values)
   }
 
+  // 状态同步检查函数（用于调试）
+  const logCurrentState = () => {
+    console.log('=== 当前状态检查 ===')
+    console.log('筛选条件:', filters)
+    console.log('搜索查询:', searchQuery)
+    console.log('时间范围:', timeRangeFilter)
+    console.log('黄牌条件:', yellowCardConditions)
+    console.log('排序字段:', sortField, '排序方向:', sortOrder)
+    console.log('分页状态:', pagination)
+    console.log('数据条数:', data.length)
+    console.log('选择状态:', { selectedRowKeys, selectedRows: selectedRows.length })
+    console.log('==================')
+  }
+
   // 处理筛选
   const handleFilter = (values: any) => {
+    const filterStartTime = Date.now()
+    
+    console.log('🔍 开始应用通用筛选条件 ====================')
+    console.log('📝 筛选表单值:', values)
+    console.log('⏰ 筛选开始时间:', new Date(filterStartTime).toLocaleString())
+    console.log('📊 当前筛选条件:', filters)
+    
     const newFilters: SimpleJoinFilterParams = {}
     
     // 基础筛选
-    if (values.filter_employee_name) newFilters.filter_employee_name = values.filter_employee_name
-    if (values.filter_employee_uid) newFilters.filter_employee_uid = values.filter_employee_uid
-    if (values.filter_xiaohongshu_nickname) newFilters.filter_xiaohongshu_nickname = values.filter_xiaohongshu_nickname
-    if (values.filter_region) newFilters.filter_region = values.filter_region
-    if (values.filter_status) newFilters.filter_status = values.filter_status
-    if (values.time_range_remark) newFilters.time_range_remark = values.time_range_remark
+    if (values.filter_employee_name) {
+      newFilters.filter_employee_name = values.filter_employee_name
+    }
+    if (values.filter_employee_uid) {
+      newFilters.filter_employee_uid = values.filter_employee_uid
+    }
+    if (values.filter_xiaohongshu_nickname) {
+      newFilters.filter_xiaohongshu_nickname = values.filter_xiaohongshu_nickname
+    }
+    if (values.filter_region) {
+      newFilters.filter_region = values.filter_region
+    }
+    if (values.filter_status) {
+      newFilters.filter_status = values.filter_status
+    }
+    if (values.time_range_remark) {
+      newFilters.time_range_remark = values.time_range_remark
+    }
     if (values.date_range) {
-      newFilters.start_date = values.date_range[0]?.format('YYYY-MM-DD')
-      newFilters.end_date = values.date_range[1]?.format('YYYY-MM-DD')
+      const startDate = values.date_range[0]?.format('YYYY-MM-DD')
+      const endDate = values.date_range[1]?.format('YYYY-MM-DD')
+      newFilters.start_date = startDate
+      newFilters.end_date = endDate
     }
 
     // 数值范围筛选
-    if (values.min_interactions !== undefined) newFilters.min_interactions = values.min_interactions
-    if (values.max_interactions !== undefined) newFilters.max_interactions = values.max_interactions
-    if (values.min_form_leads !== undefined) newFilters.min_form_leads = values.min_form_leads
-    if (values.max_form_leads !== undefined) newFilters.max_form_leads = values.max_form_leads
-    if (values.min_private_message_leads !== undefined) newFilters.min_private_message_leads = values.min_private_message_leads
-    if (values.max_private_message_leads !== undefined) newFilters.max_private_message_leads = values.max_private_message_leads
-    if (values.min_private_message_openings !== undefined) newFilters.min_private_message_openings = values.min_private_message_openings
-    if (values.max_private_message_openings !== undefined) newFilters.max_private_message_openings = values.max_private_message_openings
-    if (values.min_private_message_leads_kept !== undefined) newFilters.min_private_message_leads_kept = values.min_private_message_leads_kept
-    if (values.max_private_message_leads_kept !== undefined) newFilters.max_private_message_leads_kept = values.max_private_message_leads_kept
-    if (values.min_notes_exposure_count !== undefined) newFilters.min_notes_exposure_count = values.min_notes_exposure_count
-    if (values.max_notes_exposure_count !== undefined) newFilters.max_notes_exposure_count = values.max_notes_exposure_count
-    if (values.min_notes_click_count !== undefined) newFilters.min_notes_click_count = values.min_notes_click_count
-    if (values.max_notes_click_count !== undefined) newFilters.max_notes_click_count = values.max_notes_click_count
-    if (values.min_published_notes_count !== undefined) newFilters.min_published_notes_count = values.min_published_notes_count
-    if (values.max_published_notes_count !== undefined) newFilters.max_published_notes_count = values.max_published_notes_count
-    if (values.min_promoted_notes_count !== undefined) newFilters.min_promoted_notes_count = values.min_promoted_notes_count
-    if (values.max_promoted_notes_count !== undefined) newFilters.max_promoted_notes_count = values.max_promoted_notes_count
-    if (values.min_notes_promotion_cost !== undefined) newFilters.min_notes_promotion_cost = values.min_notes_promotion_cost
-    if (values.max_notes_promotion_cost !== undefined) newFilters.max_notes_promotion_cost = values.max_notes_promotion_cost
+    if (values.min_interactions !== undefined) {
+      newFilters.min_interactions = values.min_interactions
+    }
+    if (values.max_interactions !== undefined) {
+      newFilters.max_interactions = values.max_interactions
+    }
+    if (values.min_form_leads !== undefined) {
+      newFilters.min_form_leads = values.min_form_leads
+    }
+    if (values.max_form_leads !== undefined) {
+      newFilters.max_form_leads = values.max_form_leads
+    }
+    if (values.min_private_message_leads !== undefined) {
+      newFilters.min_private_message_leads = values.min_private_message_leads
+    }
+    if (values.max_private_message_leads !== undefined) {
+      newFilters.max_private_message_leads = values.max_private_message_leads
+    }
+    if (values.min_private_message_openings !== undefined) {
+      newFilters.min_private_message_openings = values.min_private_message_openings
+    }
+    if (values.max_private_message_openings !== undefined) {
+      newFilters.max_private_message_openings = values.max_private_message_openings
+    }
+    if (values.min_private_message_leads_kept !== undefined) {
+      newFilters.min_private_message_leads_kept = values.min_private_message_leads_kept
+    }
+    if (values.max_private_message_leads_kept !== undefined) {
+      newFilters.max_private_message_leads_kept = values.max_private_message_leads_kept
+    }
+    if (values.min_notes_exposure_count !== undefined) {
+      newFilters.min_notes_exposure_count = values.min_notes_exposure_count
+    }
+    if (values.max_notes_exposure_count !== undefined) {
+      newFilters.max_notes_exposure_count = values.max_notes_exposure_count
+    }
+    if (values.min_notes_click_count !== undefined) {
+      newFilters.min_notes_click_count = values.min_notes_click_count
+    }
+    if (values.max_notes_click_count !== undefined) {
+      newFilters.max_notes_click_count = values.max_notes_click_count
+    }
+    if (values.min_published_notes_count !== undefined) {
+      newFilters.min_published_notes_count = values.min_published_notes_count
+    }
+    if (values.max_published_notes_count !== undefined) {
+      newFilters.max_published_notes_count = values.max_published_notes_count
+    }
+    if (values.min_promoted_notes_count !== undefined) {
+      newFilters.min_promoted_notes_count = values.min_promoted_notes_count
+    }
+    if (values.max_promoted_notes_count !== undefined) {
+      newFilters.max_promoted_notes_count = values.max_promoted_notes_count
+    }
+    if (values.min_notes_promotion_cost !== undefined) {
+      newFilters.min_notes_promotion_cost = values.min_notes_promotion_cost
+    }
+    if (values.max_notes_promotion_cost !== undefined) {
+      newFilters.max_notes_promotion_cost = values.max_notes_promotion_cost
+    }
 
     // 响应时间筛选
-    if (values.min_response_time !== undefined) newFilters.min_response_time = values.min_response_time
-    if (values.max_response_time !== undefined) newFilters.max_response_time = values.max_response_time
-    if (values.min_user_rating !== undefined) newFilters.min_user_rating = values.min_user_rating
-    if (values.max_user_rating !== undefined) newFilters.max_user_rating = values.max_user_rating
-    if (values.min_score_15s_response !== undefined) newFilters.min_score_15s_response = values.min_score_15s_response
-    if (values.max_score_15s_response !== undefined) newFilters.max_score_15s_response = values.max_score_15s_response
-    if (values.min_score_30s_response !== undefined) newFilters.min_score_30s_response = values.min_score_30s_response
-    if (values.max_score_30s_response !== undefined) newFilters.max_score_30s_response = values.max_score_30s_response
-    if (values.min_score_1min_response !== undefined) newFilters.min_score_1min_response = values.min_score_1min_response
-    if (values.max_score_1min_response !== undefined) newFilters.max_score_1min_response = values.max_score_1min_response
-    if (values.min_score_1hour_timeout !== undefined) newFilters.min_score_1hour_timeout = values.min_score_1hour_timeout
-    if (values.max_score_1hour_timeout !== undefined) newFilters.max_score_1hour_timeout = values.max_score_1hour_timeout
-    if (values.min_score_avg_response_time !== undefined) newFilters.min_score_avg_response_time = values.min_score_avg_response_time
-    if (values.max_score_avg_response_time !== undefined) newFilters.max_score_avg_response_time = values.max_score_avg_response_time
+    if (values.min_response_time !== undefined) {
+      newFilters.min_response_time = values.min_response_time
+    }
+    if (values.max_response_time !== undefined) {
+      newFilters.max_response_time = values.max_response_time
+    }
+    if (values.min_user_rating !== undefined) {
+      newFilters.min_user_rating = values.min_user_rating
+    }
+    if (values.max_user_rating !== undefined) {
+      newFilters.max_user_rating = values.max_user_rating
+    }
+    if (values.min_score_15s_response !== undefined) {
+      newFilters.min_score_15s_response = values.min_score_15s_response
+    }
+    if (values.max_score_15s_response !== undefined) {
+      newFilters.max_score_15s_response = values.max_score_15s_response
+    }
+    if (values.min_score_30s_response !== undefined) {
+      newFilters.min_score_30s_response = values.min_score_30s_response
+    }
+    if (values.max_score_30s_response !== undefined) {
+      newFilters.max_score_30s_response = values.max_score_30s_response
+    }
+    if (values.min_score_1min_response !== undefined) {
+      newFilters.min_score_1min_response = values.min_score_1min_response
+    }
+    if (values.max_score_1min_response !== undefined) {
+      newFilters.max_score_1min_response = values.max_score_1min_response
+    }
+    if (values.min_score_1hour_timeout !== undefined) {
+      newFilters.min_score_1hour_timeout = values.min_score_1hour_timeout
+    }
+    if (values.max_score_1hour_timeout !== undefined) {
+      newFilters.max_score_1hour_timeout = values.max_score_1hour_timeout
+      console.log('✅ 添加最大1小时超时评分筛选:', values.max_score_1hour_timeout)
+    }
+    if (values.min_score_avg_response_time !== undefined) {
+      newFilters.min_score_avg_response_time = values.min_score_avg_response_time
+      console.log('✅ 添加最小平均响应时间评分筛选:', values.min_score_avg_response_time)
+    }
+    if (values.max_score_avg_response_time !== undefined) {
+      newFilters.max_score_avg_response_time = values.max_score_avg_response_time
+      console.log('✅ 添加最大平均响应时间评分筛选:', values.max_score_avg_response_time)
+    }
 
-
-
+    // 先更新筛选条件
     setFilters(newFilters)
+    
+    // 重置分页到第一页
     setPagination(prev => ({ ...prev, current: 1 }))
+    
+    // 清除选择状态
+    clearSelection()
+    // 关闭弹窗
     setFilterModalVisible(false)
+    // 显示成功消息
     message.success('筛选条件已应用')
+
+    // 注意：不要在这里直接调用 loadData()，让 useEffect 自动处理
   }
 
   // 处理表格变化
   const handleTableChange = (_pagination: any, _filters: any, sorter: any) => {
     if (sorter.field) {
-      setSortField(sorter.field)
-      setSortOrder(sorter.order === 'ascend' ? 'asc' : 'desc')
+      const sortStartTime = Date.now()
+      const newSortField = sorter.field
+      const newSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
+
+      setSortField(newSortField)
+      setSortOrder(newSortOrder)
     }
   }
 
   // 处理分页变化
   const handlePaginationChange = (page: number, pageSize: number) => {
+    const paginationStartTime = Date.now()
+
     try {
       // 验证分页参数
       const validPage = Math.max(1, page || 1)
       const validPageSize = [20, 50, 100].includes(pageSize) ? pageSize : 20
-      
+
+      // 更新分页状态
       setPagination(prev => ({
         ...prev,
         current: validPage,
         pageSize: validPageSize
       }))
-      
       // 清除选择状态，避免数据不匹配
       clearSelection()
     } catch (error) {
@@ -952,13 +1175,19 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 重置筛选
   const resetFilters = () => {
+    const resetStartTime = Date.now()
     // 清除所有筛选条件，黄牌判断条件独立管理
     setFilters({})
     setSearchQuery('')
+    setTimeRangeFilter(null)
     setSortField('employee_name')
     setSortOrder('asc')
+    
+    // 重置分页到第一页
     setPagination(prev => ({ ...prev, current: 1 }))
     
+    // 清除选择状态
+    clearSelection()
     // 重置筛选表单（添加安全检查）
     try {
       if (form && typeof form.resetFields === 'function') {
@@ -969,6 +1198,7 @@ const EmployeeSimpleJoin: React.FC = () => {
     }
 
     message.success('已清除所有筛选条件')
+    
   }
 
   // 查看笔记详情
@@ -1110,7 +1340,16 @@ const EmployeeSimpleJoin: React.FC = () => {
         key: 'all',
         text: '全选',
         onSelect: () => {
-          const allKeys = data.map((record, index) => record.employee_id || `index_${index}`)
+          // 使用与表格 rowKey 相同的逻辑生成选择键
+          const allKeys = data.map((record) => {
+            if (record?._unique_id) {
+              return record._unique_id
+            }
+            // 如果 _unique_id 不存在，使用组合字段生成唯一key
+            const fallbackKey = `${record?.employee_id || 'unknown'}_${record?.employee_uid || 'unknown'}_${Math.random().toString(36).substr(2, 9)}`
+            console.warn('记录缺少 _unique_id，使用备选方案:', record, '生成key:', fallbackKey)
+            return fallbackKey
+          })
           setSelectedRowKeys(allKeys)
           setSelectedRows(data)
         }
@@ -1555,6 +1794,17 @@ const EmployeeSimpleJoin: React.FC = () => {
                   高级筛选
                 </Button>
                 <Button icon={<ReloadOutlined />} onClick={resetFilters}>重置筛选</Button>
+                {/* 调试按钮 - 仅在开发环境显示 */}
+                {process.env.NODE_ENV === 'development' && (
+                  <Button 
+                    type="dashed" 
+                    size="small"
+                    onClick={logCurrentState}
+                    title="检查当前状态（开发调试用）"
+                  >
+                    状态检查
+                  </Button>
+                )}
                 <Dropdown
                   menu={{
                     items: [
@@ -1657,10 +1907,17 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataSource={data || []}
           rowKey={(record) => {
             try {
-              return record?.employee_id || `uid_${record?.employee_uid || Math.random()}`
+              // 优先使用生成的唯一内部ID作为行键
+              if (record?._unique_id) {
+                return record._unique_id
+              }
+              // 如果 _unique_id 不存在，使用组合字段生成唯一key
+              const fallbackKey = `${record?.employee_id || 'unknown'}_${record?.employee_uid || 'unknown'}_${Math.random().toString(36).substr(2, 9)}`
+              console.warn('记录缺少 _unique_id，使用备选方案:', record, '生成key:', fallbackKey)
+              return fallbackKey
             } catch (error) {
               console.warn('生成行键时出错:', error, record)
-              return `error_${Math.random()}`
+              return `error_${Math.random().toString(36).substr(2, 9)}`
             }
           }}
           loading={loading}
@@ -1765,6 +2022,8 @@ const EmployeeSimpleJoin: React.FC = () => {
           key={JSON.stringify(filters)} // 强制重新渲染表单
           initialValues={{
             ...filters,
+            // 确保搜索查询和筛选表单同步
+            filter_employee_name: filters.filter_employee_name || searchQuery,
             date_range: filters.start_date && filters.end_date ? [
               dayjs(filters.start_date),
               dayjs(filters.end_date)

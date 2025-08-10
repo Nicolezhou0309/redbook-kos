@@ -54,10 +54,9 @@ BEGIN
     RIGHT JOIN public.employee_leads_data eld ON e.employee_uid = eld.account_id
           RIGHT JOIN public.employee_response_data erd ON (
         COALESCE(e.employee_uid, eld.account_id) = erd.employee_uid
-        -- 关键修复：确保两个表的时间范围完全一致
+        -- 只匹配时间范围，不匹配remark
         AND eld.time_range->>''start_date'' = erd.time_range->>''start_date''
         AND eld.time_range->>''end_date'' = erd.time_range->>''end_date''
-        AND eld.time_range->>''remark'' = erd.time_range->>''remark''
       )
     WHERE 1=1
   ';
