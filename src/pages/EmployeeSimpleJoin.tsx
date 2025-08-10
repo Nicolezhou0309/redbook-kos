@@ -110,7 +110,7 @@ const EmployeeSimpleJoin: React.FC = () => {
   const [exportingWeeklySplit, setExportingWeeklySplit] = useState(false)
   const [sendingWeCom, setSendingWeCom] = useState(false)
   const [wecomPreviewVisible, setWecomPreviewVisible] = useState(false)
-  const [wecomPreviewMessages, setWecomPreviewMessages] = useState<string[]>([])
+  const [, setWecomPreviewMessages] = useState<string[]>([])
   const [wecomHeader, setWecomHeader] = useState('')
   const [wecomLinkChunks, setWecomLinkChunks] = useState<string[]>([])
   const [wecomPreviewLoading, setWecomPreviewLoading] = useState(false)
@@ -511,7 +511,6 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 发送周报到企业微信（分社区：多链接 Markdown 消息）
   const handleSendWeeklyToWeCom = async () => {
-    const SEND_URL = `/api/wecom/webhook-send`
 
     try {
       setSendingWeCom(true)

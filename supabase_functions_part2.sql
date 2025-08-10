@@ -2,6 +2,7 @@
 -- 第二部分：高级搜索函数
 -- ========================================
 
+
 -- 1. 员工联合搜索函数（支持多种搜索类型）
 CREATE OR REPLACE FUNCTION search_employees_advanced(
   search_query TEXT DEFAULT NULL,
