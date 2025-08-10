@@ -1,14 +1,115 @@
-CREATE OR REPLACE FUNCTION public.get_employee_join_data(search_query text DEFAULT NULL::text, filter_employee_name text DEFAULT NULL::text, filter_employee_uid text DEFAULT NULL::text, filter_xiaohongshu_nickname text DEFAULT NULL::text, filter_region text DEFAULT NULL::text, filter_status text DEFAULT NULL::text, time_range_remark text DEFAULT NULL::text, start_date text DEFAULT NULL::text, end_date text DEFAULT NULL::text, min_interactions integer DEFAULT NULL::integer, max_interactions integer DEFAULT NULL::integer, min_form_leads integer DEFAULT NULL::integer, max_form_leads integer DEFAULT NULL::integer, min_private_message_leads integer DEFAULT NULL::integer, max_private_message_leads integer DEFAULT NULL::integer, min_private_message_openings integer DEFAULT NULL::integer, max_private_message_openings integer DEFAULT NULL::integer, min_private_message_leads_kept integer DEFAULT NULL::integer, max_private_message_leads_kept integer DEFAULT NULL::integer, min_notes_exposure_count integer DEFAULT NULL::integer, max_notes_exposure_count integer DEFAULT NULL::integer, min_notes_click_count integer DEFAULT NULL::integer, max_notes_click_count integer DEFAULT NULL::integer, min_published_notes_count integer DEFAULT NULL::integer, max_published_notes_count integer DEFAULT NULL::integer, min_promoted_notes_count integer DEFAULT NULL::integer, max_promoted_notes_count integer DEFAULT NULL::integer, min_notes_promotion_cost numeric DEFAULT NULL::numeric, max_notes_promotion_cost numeric DEFAULT NULL::numeric, min_response_time numeric DEFAULT NULL::numeric, max_response_time numeric DEFAULT NULL::numeric, min_user_rating numeric DEFAULT NULL::numeric, max_user_rating numeric DEFAULT NULL::numeric, min_score_15s_response numeric DEFAULT NULL::numeric, max_score_15s_response numeric DEFAULT NULL::numeric, min_score_30s_response numeric DEFAULT NULL::numeric, max_score_30s_response numeric DEFAULT NULL::numeric, min_score_1min_response numeric DEFAULT NULL::numeric, max_score_1min_response numeric DEFAULT NULL::numeric, min_score_1hour_timeout numeric DEFAULT NULL::numeric, max_score_1hour_timeout numeric DEFAULT NULL::numeric, min_score_avg_response_time numeric DEFAULT NULL::numeric, max_score_avg_response_time numeric DEFAULT NULL::numeric, min_rate_15s_response numeric DEFAULT NULL::numeric, max_rate_15s_response numeric DEFAULT NULL::numeric, min_rate_30s_response numeric DEFAULT NULL::numeric, max_rate_30s_response numeric DEFAULT NULL::numeric, min_rate_1min_response numeric DEFAULT NULL::numeric, max_rate_1min_response numeric DEFAULT NULL::numeric, min_rate_1hour_timeout numeric DEFAULT NULL::numeric, max_rate_1hour_timeout numeric DEFAULT NULL::numeric, yellow_card_timeout_rate numeric DEFAULT NULL::numeric, yellow_card_notes_count integer DEFAULT NULL::integer, yellow_card_min_private_message_leads integer DEFAULT NULL::integer, yellow_card_start_date text DEFAULT NULL::text, yellow_card_end_date text DEFAULT NULL::text, sort_by text DEFAULT 'employee_name'::text, sort_direction text DEFAULT 'asc'::text, page_number integer DEFAULT 1, page_size integer DEFAULT 20)
- RETURNS TABLE(employee_id uuid, employee_name text, employee_uid text, status text, created_at timestamp with time zone, leads_id uuid, xiaohongshu_account_id text, xiaohongshu_nickname text, region text, tags text, activation_time date, published_notes_count integer, promoted_notes_count integer, notes_promotion_cost numeric, total_interactions integer, total_form_leads integer, total_private_message_leads integer, total_private_message_openings integer, total_private_message_leads_kept integer, notes_exposure_count integer, notes_click_count integer, time_range jsonb, response_id uuid, score_15s_response numeric, score_30s_response numeric, score_1min_response numeric, score_1hour_timeout numeric, score_avg_response_time numeric, rate_15s_response text, rate_30s_response text, rate_1min_response text, rate_1hour_timeout text, avg_response_time numeric, user_rating_score numeric, response_time_range jsonb, total_count bigint)
- LANGUAGE plpgsql
- SECURITY DEFINER
+-- 修复员工数据宽表JOIN重复问题
+-- 问题：当前JOIN逻辑只匹配employee_uid，没有确保时间范围一致，导致同一员工不同时间范围的数据产生笛卡尔积
+
+CREATE OR REPLACE FUNCTION public.get_employee_join_data_fixed(
+  search_query text DEFAULT NULL::text,
+  filter_employee_name text DEFAULT NULL::text,
+  filter_employee_uid text DEFAULT NULL::text,
+  filter_xiaohongshu_nickname text DEFAULT NULL::text,
+  filter_region text DEFAULT NULL::text,
+  filter_status text DEFAULT NULL::text,
+  time_range_remark text DEFAULT NULL::text,
+  start_date text DEFAULT NULL::text,
+  end_date text DEFAULT NULL::text,
+  min_interactions integer DEFAULT NULL::integer,
+  max_interactions integer DEFAULT NULL::integer,
+  min_form_leads integer DEFAULT NULL::integer,
+  max_form_leads integer DEFAULT NULL::integer,
+  min_private_message_leads integer DEFAULT NULL::integer,
+  max_private_message_leads integer DEFAULT NULL::integer,
+  min_private_message_openings integer DEFAULT NULL::integer,
+  max_private_message_openings integer DEFAULT NULL::integer,
+  min_private_message_leads_kept integer DEFAULT NULL::integer,
+  max_private_message_leads_kept integer DEFAULT NULL::integer,
+  min_notes_exposure_count integer DEFAULT NULL::integer,
+  max_notes_exposure_count integer DEFAULT NULL::integer,
+  min_notes_click_count integer DEFAULT NULL::integer,
+  max_notes_click_count integer DEFAULT NULL::integer,
+  min_published_notes_count integer DEFAULT NULL::integer,
+  max_published_notes_count integer DEFAULT NULL::integer,
+  min_promoted_notes_count integer DEFAULT NULL::integer,
+  max_promoted_notes_count integer DEFAULT NULL::integer,
+  min_notes_promotion_cost numeric DEFAULT NULL::numeric,
+  max_notes_promotion_cost numeric DEFAULT NULL::numeric,
+  min_response_time numeric DEFAULT NULL::numeric,
+  max_response_time numeric DEFAULT NULL::numeric,
+  min_user_rating numeric DEFAULT NULL::numeric,
+  max_user_rating numeric DEFAULT NULL::numeric,
+  min_score_15s_response numeric DEFAULT NULL::numeric,
+  max_score_15s_response numeric DEFAULT NULL::numeric,
+  min_score_30s_response numeric DEFAULT NULL::numeric,
+  max_score_30s_response numeric DEFAULT NULL::numeric,
+  min_score_1min_response numeric DEFAULT NULL::numeric,
+  max_score_1min_response numeric DEFAULT NULL::numeric,
+  min_score_1hour_timeout numeric DEFAULT NULL::numeric,
+  max_score_1hour_timeout numeric DEFAULT NULL::numeric,
+  min_score_avg_response_time numeric DEFAULT NULL::numeric,
+  max_score_avg_response_time numeric DEFAULT NULL::numeric,
+  min_rate_15s_response numeric DEFAULT NULL::numeric,
+  max_rate_15s_response numeric DEFAULT NULL::numeric,
+  min_rate_30s_response numeric DEFAULT NULL::numeric,
+  max_rate_30s_response numeric DEFAULT NULL::numeric,
+  min_rate_1min_response numeric DEFAULT NULL::numeric,
+  max_rate_1min_response numeric DEFAULT NULL::numeric,
+  min_rate_1hour_timeout numeric DEFAULT NULL::numeric,
+  max_rate_1hour_timeout numeric DEFAULT NULL::numeric,
+  yellow_card_timeout_rate numeric DEFAULT NULL::numeric,
+  yellow_card_notes_count integer DEFAULT NULL::integer,
+  yellow_card_min_private_message_leads integer DEFAULT NULL::integer,
+  yellow_card_start_date text DEFAULT NULL::text,
+  yellow_card_end_date text DEFAULT NULL::text,
+  sort_by text DEFAULT 'employee_name'::text,
+  sort_direction text DEFAULT 'asc'::text,
+  page_number integer DEFAULT 1,
+  page_size integer DEFAULT 20
+)
+RETURNS TABLE(
+  employee_id uuid,
+  employee_name text,
+  employee_uid text,
+  status text,
+  created_at timestamp with time zone,
+  leads_id uuid,
+  xiaohongshu_account_id text,
+  xiaohongshu_nickname text,
+  region text,
+  tags text,
+  activation_time date,
+  published_notes_count integer,
+  promoted_notes_count integer,
+  notes_promotion_cost numeric,
+  total_interactions integer,
+  total_form_leads integer,
+  total_private_message_leads integer,
+  total_private_message_openings integer,
+  total_private_message_leads_kept integer,
+  notes_exposure_count integer,
+  notes_click_count integer,
+  time_range jsonb,
+  response_id uuid,
+  score_15s_response numeric,
+  score_30s_response numeric,
+  score_1min_response numeric,
+  score_1hour_timeout numeric,
+  score_avg_response_time numeric,
+  rate_15s_response text,
+  rate_30s_response text,
+  rate_1min_response text,
+  rate_1hour_timeout text,
+  avg_response_time numeric,
+  user_rating_score numeric,
+  response_time_range jsonb,
+  total_count bigint
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
 AS $function$
 DECLARE
   base_query TEXT;
   where_conditions TEXT[] := ARRAY[]::TEXT[];
   result_count BIGINT;
 BEGIN
-  -- 构建基础查询
+  -- 构建基础查询 - 修复JOIN逻辑，确保时间范围完全匹配
   base_query := '
     SELECT 
       e.id as employee_id,
@@ -52,13 +153,13 @@ BEGIN
       COUNT(*) OVER() as total_count
     FROM public.employee_list e
     RIGHT JOIN public.employee_leads_data eld ON e.employee_uid = eld.account_id
-          RIGHT JOIN public.employee_response_data erd ON (
-        COALESCE(e.employee_uid, eld.account_id) = erd.employee_uid
-        -- 关键修复：确保两个表的时间范围完全一致
-        AND eld.time_range->>''start_date'' = erd.time_range->>''start_date''
-        AND eld.time_range->>''end_date'' = erd.time_range->>''end_date''
-        AND eld.time_range->>''remark'' = erd.time_range->>''remark''
-      )
+    RIGHT JOIN public.employee_response_data erd ON (
+      COALESCE(e.employee_uid, eld.account_id) = erd.employee_uid
+      -- 关键修复：确保两个表的时间范围完全一致
+      AND eld.time_range->>''start_date'' = erd.time_range->>''start_date''
+      AND eld.time_range->>''end_date'' = erd.time_range->>''end_date''
+      AND eld.time_range->>''remark'' = erd.time_range->>''remark''
+    )
     WHERE 1=1
   ';
 
@@ -90,24 +191,20 @@ BEGIN
     where_conditions := array_append(where_conditions, format('e.status = ''%s''', filter_status));
   END IF;
 
-  -- 时间范围筛选
+  -- 时间范围筛选 - 由于JOIN已经确保时间范围一致，这里只需要筛选其中一个表即可
   IF time_range_remark IS NOT NULL THEN
     where_conditions := array_append(where_conditions, format('eld.time_range->>''remark'' = ''%s''', time_range_remark));
   END IF;
 
-  -- 日期范围筛选 - 由于JOIN已经确保时间范围一致，这里只需要筛选其中一个表
+  -- 日期范围筛选 - 由于JOIN已经确保时间范围一致，这里只需要筛选其中一个表即可
   IF start_date IS NOT NULL AND end_date IS NOT NULL THEN
     where_conditions := array_append(where_conditions, format('(
       (eld.time_range->>''start_date'')::DATE <= ''%s''::DATE AND (eld.time_range->>''end_date'')::DATE >= ''%s''::DATE
     )', end_date, start_date));
   ELSIF start_date IS NOT NULL THEN
-    where_conditions := array_append(where_conditions, format('(
-      (eld.time_range->>''end_date'')::DATE >= ''%s''::DATE
-    )', start_date));
+    where_conditions := array_append(where_conditions, format('(eld.time_range->>''end_date'')::DATE >= ''%s''::DATE', start_date));
   ELSIF end_date IS NOT NULL THEN
-    where_conditions := array_append(where_conditions, format('(
-      (eld.time_range->>''start_date'')::DATE <= ''%s''::DATE
-    )', end_date));
+    where_conditions := array_append(where_conditions, format('(eld.time_range->>''start_date'')::DATE <= ''%s''::DATE', end_date));
   END IF;
 
   -- 数值范围筛选
@@ -174,7 +271,7 @@ BEGIN
   END IF;
 
   IF max_published_notes_count IS NOT NULL THEN
-    where_conditions := array_append(where_conditions, format('eld.published_notes_count < %s', max_published_notes_count));
+    where_conditions := array_append(where_conditions, format('eld.published_notes_count <= %s', max_published_notes_count));
   END IF;
 
   IF min_promoted_notes_count IS NOT NULL THEN
@@ -482,23 +579,15 @@ BEGIN
 
   -- 黄牌筛选逻辑：时间范围 AND 私信进线>x AND (超时率严格大于 OR 笔记数严格小于)
   IF yellow_card_timeout_rate IS NOT NULL OR yellow_card_notes_count IS NOT NULL OR yellow_card_min_private_message_leads IS NOT NULL THEN
-    -- 时间范围条件
+    -- 时间范围条件 - 由于JOIN已经确保时间范围一致，这里只需要筛选其中一个表即可
     IF yellow_card_start_date IS NOT NULL AND yellow_card_end_date IS NOT NULL THEN
       where_conditions := array_append(where_conditions, format('(
         (eld.time_range->>''start_date'')::DATE <= ''%s''::DATE AND (eld.time_range->>''end_date'')::DATE >= ''%s''::DATE
-      ) AND (
-        (erd.time_range->>''start_date'')::DATE <= ''%s''::DATE AND (erd.time_range->>''end_date'')::DATE >= ''%s''::DATE
-      )', yellow_card_end_date, yellow_card_start_date, yellow_card_end_date, yellow_card_start_date));
+      )', yellow_card_end_date, yellow_card_start_date));
     ELSIF yellow_card_start_date IS NOT NULL THEN
-      where_conditions := array_append(where_conditions, format('(
-        (eld.time_range->>''end_date'')::DATE >= ''%s''::DATE
-      ) AND (
-        (erd.time_range->>''end_date'')::DATE >= ''%s''::DATE
-      )', yellow_card_start_date, yellow_card_start_date));
+      where_conditions := array_append(where_conditions, format('(eld.time_range->>''end_date'')::DATE >= ''%s''::DATE', yellow_card_start_date));
     ELSIF yellow_card_end_date IS NOT NULL THEN
-      where_conditions := array_append(where_conditions, format('(
-        (eld.time_range->>''start_date'')::DATE <= ''%s''::DATE
-      )', yellow_card_end_date));
+      where_conditions := array_append(where_conditions, format('(eld.time_range->>''start_date'')::DATE <= ''%s''::DATE', yellow_card_end_date));
     END IF;
 
     -- 私信进线最小值条件（剔除异常数据）
@@ -512,12 +601,36 @@ BEGIN
       timeout_and_leads_condition TEXT := '';
       notes_condition TEXT := '';
     BEGIN
-      -- 简化黄牌条件构建，避免复杂的字符串转义
+      -- 构建超时率AND私信进线的条件
       IF yellow_card_timeout_rate IS NOT NULL AND yellow_card_min_private_message_leads IS NOT NULL THEN
-        timeout_and_leads_condition := format('eld.total_private_message_leads >= %s', yellow_card_min_private_message_leads);
+        timeout_and_leads_condition := format('(
+          CASE 
+            WHEN erd.rate_1hour_timeout IS NOT NULL AND erd.rate_1hour_timeout != '''' THEN 
+              CASE 
+                WHEN erd.rate_1hour_timeout LIKE ''%%%%'' THEN 
+                  NULLIF(REPLACE(erd.rate_1hour_timeout, ''%%'', ''''), '''')::NUMERIC
+                ELSE 
+                  NULLIF(erd.rate_1hour_timeout, '''')::NUMERIC
+              END
+            ELSE NULL
+          END
+        ) > %s AND eld.total_private_message_leads >= %s', yellow_card_timeout_rate, yellow_card_min_private_message_leads);
       ELSIF yellow_card_timeout_rate IS NOT NULL THEN
-        timeout_and_leads_condition := format('erd.rate_1hour_timeout > %s', yellow_card_timeout_rate);
+        -- 只有超时率条件
+        timeout_and_leads_condition := format('(
+          CASE 
+            WHEN erd.rate_1hour_timeout IS NOT NULL AND erd.rate_1hour_timeout != '''' THEN 
+              CASE 
+                WHEN erd.rate_1hour_timeout LIKE ''%%%%'' THEN 
+                  NULLIF(REPLACE(erd.rate_1hour_timeout, ''%%'', ''''), '''')::NUMERIC
+                ELSE 
+                  NULLIF(erd.rate_1hour_timeout, '''')::NUMERIC
+              END
+            ELSE NULL
+          END
+        ) > %s', yellow_card_timeout_rate);
       ELSIF yellow_card_min_private_message_leads IS NOT NULL THEN
+        -- 只有私信进线条件
         timeout_and_leads_condition := format('eld.total_private_message_leads >= %s', yellow_card_min_private_message_leads);
       END IF;
 
@@ -565,8 +678,45 @@ BEGIN
       sort_direction := 'asc';
     END IF;
     
-    -- 简化排序逻辑，避免复杂的字符串转义
-    base_query := base_query || format(' ORDER BY %s %s NULLS LAST', sort_by, sort_direction);
+    -- 智能排序：根据字段类型选择排序方式
+    IF sort_by IN ('score_15s_response', 'score_30s_response', 'score_1min_response', 'score_1hour_timeout', 'score_avg_response_time') THEN
+      -- 响应评分字段：支持数值和字符串格式的智能排序
+      base_query := base_query || format(' ORDER BY (
+        CASE 
+          WHEN erd.%s IS NOT NULL THEN erd.%s
+          WHEN erd.rate_%s IS NOT NULL AND erd.rate_%s != '''' THEN 
+            CASE 
+              WHEN erd.rate_%s LIKE ''%%%%'' THEN 
+                NULLIF(REPLACE(erd.rate_%s, ''%%'', ''''), '''')::NUMERIC
+              ELSE 
+                NULLIF(erd.rate_%s, '''')::NUMERIC
+            END
+          ELSE NULL
+        END
+      ) %s NULLS LAST', 
+      sort_by, sort_by, 
+      REPLACE(sort_by, 'score_', ''), REPLACE(sort_by, 'score_', ''),
+      REPLACE(sort_by, 'score_', ''), REPLACE(sort_by, 'score_', ''), REPLACE(sort_by, 'score_', ''),
+      sort_direction);
+    ELSIF sort_by IN ('rate_15s_response', 'rate_30s_response', 'rate_1min_response', 'rate_1hour_timeout') THEN
+      -- 回复率字段：支持百分比字符串的智能排序
+      base_query := base_query || format(' ORDER BY (
+        CASE 
+          WHEN erd.%s IS NOT NULL AND erd.%s != '''' THEN 
+            CASE 
+              WHEN erd.%s LIKE ''%%%%'' THEN 
+                NULLIF(REPLACE(erd.%s, ''%%'', ''''), '''')::NUMERIC
+              ELSE 
+                NULLIF(erd.%s, '''')::NUMERIC
+            END
+          ELSE NULL
+        END
+      ) %s NULLS LAST', 
+      sort_by, sort_by, sort_by, sort_by, sort_by, sort_direction);
+    ELSE
+      -- 其他字段：直接排序
+      base_query := base_query || format(' ORDER BY %s %s NULLS LAST', sort_by, sort_direction);
+    END IF;
   ELSE
     base_query := base_query || ' ORDER BY e.employee_name ASC';
   END IF;
@@ -581,4 +731,35 @@ EXCEPTION
   WHEN OTHERS THEN
     RAISE EXCEPTION '查询失败: %', SQLERRM;
 END;
-$function$
+$function$;
+
+-- 测试查询：验证修复后的函数是否正常工作
+-- SELECT * FROM get_employee_join_data_fixed(
+--   start_date := '2024-01-01',
+--   end_date := '2024-01-31',
+--   time_range_remark := '本周'
+-- ) LIMIT 5;
+
+-- 对比查询：查看修复前后的差异
+-- 修复前（可能产生重复）：
+-- SELECT COUNT(*) FROM (
+--   SELECT e.employee_uid, eld.time_range, erd.time_range
+--   FROM public.employee_list e
+--   RIGHT JOIN public.employee_leads_data eld ON e.employee_uid = eld.account_id
+--   RIGHT JOIN public.employee_response_data erd ON e.employee_uid = erd.employee_uid
+--   WHERE eld.time_range->>'remark' = '本周'
+-- ) t;
+
+-- 修复后（确保时间范围一致）：
+-- SELECT COUNT(*) FROM (
+--   SELECT e.employee_uid, eld.time_range, erd.time_range
+--   FROM public.employee_list e
+--   RIGHT JOIN public.employee_leads_data eld ON e.employee_uid = eld.account_id
+--   RIGHT JOIN public.employee_response_data erd ON (
+--     COALESCE(e.employee_uid, eld.account_id) = erd.employee_uid
+--     AND eld.time_range->>'start_date' = erd.time_range->>'start_date'
+--     AND eld.time_range->>'end_date' = erd.time_range->>'end_date'
+--     AND eld.time_range->>'remark' = erd.time_range->>'remark'
+--   )
+--   WHERE eld.time_range->>'remark' = '本周'
+-- ) t;

@@ -10,6 +10,7 @@ import {
   MessageOutlined,
   LogoutOutlined,
   IdcardOutlined,
+  BugOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -122,6 +123,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
         },
       ],
     },
+
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {

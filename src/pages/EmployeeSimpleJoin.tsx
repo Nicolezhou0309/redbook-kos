@@ -362,7 +362,7 @@ const EmployeeSimpleJoin: React.FC = () => {
     }
   }
 
-  // 生成“违规状态”文本
+  // 生成"违规状态"文本
   const getViolationStatusText = (record: EmployeeSimpleJoinData) => {
     const yellowCardStatus = getYellowCardStatus(record)
     if (yellowCardStatus.status === 'not_set') return '未设置'
@@ -571,7 +571,8 @@ const EmployeeSimpleJoin: React.FC = () => {
         if (!fs || !fe) return true
         const tr = (rec as any).time_range
         if (!tr || !tr.start_date || !tr.end_date) return false
-        return tr.start_date <= fe && tr.end_date >= fs
+        // 修复：与后端逻辑保持一致，检查时间范围是否完全包含筛选范围
+        return tr.start_date <= fs && tr.end_date >= fe
       }
 
       const parseNumber = (v: any): number => {
@@ -665,26 +666,72 @@ const EmployeeSimpleJoin: React.FC = () => {
   const loadData = async () => {
     setLoading(true)
     try {
+      // 验证分页参数
+      const validPage = Math.max(1, pagination?.current || 1)
+      const validPageSize = [20, 50, 100].includes(pagination?.pageSize || 20) ? pagination.pageSize : 20
+      
       const result = await getEmployeeSimpleJoinData(
         filters,
         sortField,
         sortOrder,
-        { page: pagination.current, pageSize: pagination.pageSize }
+        { page: validPage, pageSize: validPageSize }
       )
       
       if (result.success) {
-        setData(result.data || [])
+        // 确保数据是数组且每个元素都有必要的属性
+        const safeData = (result.data || []).map((item: any, index: number) => {
+          try {
+            return {
+              ...item,
+              employee_id: item?.employee_id || `temp_${Date.now()}_${index}`,
+              employee_uid: item?.employee_uid || `uid_${Date.now()}_${index}`,
+              employee_name: item?.employee_name || '未知',
+              status: item?.status || 'unknown',
+              // 确保数值字段有默认值
+              total_interactions: item?.total_interactions || 0,
+              total_form_leads: item?.total_form_leads || 0,
+              total_private_message_leads: item?.total_private_message_leads || 0,
+              total_private_message_openings: item?.total_private_message_openings || 0,
+              total_private_message_leads_kept: item?.total_private_message_leads_kept || 0,
+              published_notes_count: item?.published_notes_count || 0,
+              promoted_notes_count: item?.promoted_notes_count || 0,
+              notes_promotion_cost: item?.notes_promotion_cost || 0,
+              notes_exposure_count: item?.notes_exposure_count || 0,
+              notes_click_count: item?.notes_click_count || 0,
+              avg_response_time: item?.avg_response_time || 0,
+              rate_1min_response: item?.rate_1min_response || '0%',
+              rate_1hour_timeout: item?.rate_1hour_timeout || '0%'
+            }
+          } catch (itemError) {
+            console.warn('处理数据项时出错:', itemError, item)
+            return {
+              employee_id: `error_${Date.now()}_${index}`,
+              employee_uid: `error_uid_${Date.now()}_${index}`,
+              employee_name: '数据错误',
+              status: 'error'
+            }
+          }
+        })
+        
+        setData(safeData)
         setPagination(prev => ({
           ...prev,
+          current: validPage,
+          pageSize: validPageSize,
           total: result.total || 0
         }))
         // 数据加载后清除选择
         clearSelection()
       } else {
         message.error(result.error || '加载数据失败')
+        setData([])
+        setPagination(prev => ({ ...prev, total: 0 }))
       }
     } catch (error) {
+      console.error('加载数据时发生错误:', error)
       message.error('加载数据时发生错误')
+      setData([])
+      setPagination(prev => ({ ...prev, total: 0 }))
     } finally {
       setLoading(false)
     }
@@ -885,11 +932,23 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 处理分页变化
   const handlePaginationChange = (page: number, pageSize: number) => {
-    setPagination(prev => ({
-      ...prev,
-      current: page,
-      pageSize
-    }))
+    try {
+      // 验证分页参数
+      const validPage = Math.max(1, page || 1)
+      const validPageSize = [20, 50, 100].includes(pageSize) ? pageSize : 20
+      
+      setPagination(prev => ({
+        ...prev,
+        current: validPage,
+        pageSize: validPageSize
+      }))
+      
+      // 清除选择状态，避免数据不匹配
+      clearSelection()
+    } catch (error) {
+      console.error('分页切换时出错:', error)
+      message.error('分页切换失败，请重试')
+    }
   }
 
   // 重置筛选
@@ -901,8 +960,14 @@ const EmployeeSimpleJoin: React.FC = () => {
     setSortOrder('asc')
     setPagination(prev => ({ ...prev, current: 1 }))
     
-    // 重置筛选表单
-    form.resetFields()
+    // 重置筛选表单（添加安全检查）
+    try {
+      if (form && typeof form.resetFields === 'function') {
+        form.resetFields()
+      }
+    } catch (error) {
+      console.warn('重置表单字段时出错:', error)
+    }
 
     message.success('已清除所有筛选条件')
   }
@@ -1072,7 +1137,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'employee_name',
           key: 'employee_name',
           width: 90,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.employee_name || ''
+            const bVal = b?.employee_name || ''
+            return aVal.localeCompare(bVal)
+          },
           fixed: 'left',
           render: (text: string) => <div>{text}</div>
         },
@@ -1081,7 +1150,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'status',
           key: 'status',
           width: 70,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.status || ''
+            const bVal = b?.status || ''
+            return aVal.localeCompare(bVal)
+          },
           fixed: 'left',
           render: (text: string) => (
             <Tag color={text === 'active' ? 'green' : 'red'} style={{ textAlign: 'center', display: 'inline-block' }}>{text}</Tag>
@@ -1113,7 +1186,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'xiaohongshu_nickname',
           key: 'xiaohongshu_nickname',
           width: 120,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.xiaohongshu_nickname || ''
+            const bVal = b?.xiaohongshu_nickname || ''
+            return aVal.localeCompare(bVal)
+          },
           render: (text: string) => (
             <Tooltip title={text}>
               <div 
@@ -1133,7 +1210,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'xiaohongshu_account_id',
           key: 'xiaohongshu_account_id',
           width: 120,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.xiaohongshu_account_id || ''
+            const bVal = b?.xiaohongshu_account_id || ''
+            return aVal.localeCompare(bVal)
+          },
           render: (text: string) => <div style={{ fontSize: '12px', color: '#666' }}>{text}</div>
         },
         {
@@ -1141,7 +1222,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'activation_time',
           key: 'activation_time',
           width: 120,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.activation_time ? new Date(a.activation_time).getTime() : 0
+            const bVal = b?.activation_time ? new Date(b.activation_time).getTime() : 0
+            return aVal - bVal
+          },
           render: (text: string) => text ? new Date(text).toLocaleDateString() : '-'
         },
         {
@@ -1201,7 +1286,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'total_interactions',
           key: 'total_interactions',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.total_interactions || 0
+            const bVal = b?.total_interactions || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         },
         {
@@ -1209,7 +1298,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'total_form_leads',
           key: 'total_form_leads',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.total_form_leads || 0
+            const bVal = b?.total_form_leads || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         },
         {
@@ -1217,15 +1310,23 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'total_private_message_leads',
           key: 'total_private_message_leads',
           width: 100,
-          sorter: true,
-          render: (value: number) => <div>{value}</div>
+          sorter: (a: any, b: any) => {
+            const aVal = a?.total_private_message_leads || 0
+            const bVal = b?.total_private_message_leads || 0
+            return aVal - bVal
+          },
+          render: (value: number) => <div>{value || 0}</div>
         },
         {
           title: '私信开口',
           dataIndex: 'total_private_message_openings',
           key: 'total_private_message_openings',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.total_private_message_openings || 0
+            const bVal = b?.total_private_message_openings || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         },
         {
@@ -1233,7 +1334,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'total_private_message_leads_kept',
           key: 'total_private_message_leads_kept',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.total_private_message_leads_kept || 0
+            const bVal = b?.total_private_message_leads_kept || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         }
       ]
@@ -1246,7 +1351,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'published_notes_count',
           key: 'published_notes_count',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.published_notes_count || 0
+            const bVal = b?.published_notes_count || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         },
         {
@@ -1254,7 +1363,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'promoted_notes_count',
           key: 'promoted_notes_count',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.promoted_notes_count || 0
+            const bVal = b?.promoted_notes_count || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         },
         {
@@ -1262,7 +1375,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'notes_promotion_cost',
           key: 'notes_promotion_cost',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.notes_promotion_cost || 0
+            const bVal = b?.notes_promotion_cost || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>¥{value?.toFixed(2) || '0.00'}</div>
         },
         {
@@ -1270,7 +1387,11 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'notes_exposure_count',
           key: 'notes_exposure_count',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.notes_exposure_count || 0
+            const bVal = b?.notes_exposure_count || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         },
         {
@@ -1278,88 +1399,103 @@ const EmployeeSimpleJoin: React.FC = () => {
           dataIndex: 'notes_click_count',
           key: 'notes_click_count',
           width: 100,
-          sorter: true,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.notes_click_count || 0
+            const bVal = b?.notes_click_count || 0
+            return aVal - bVal
+          },
           render: (value: number) => <div>{value}</div>
         }
       ]
     },
-            {
-          title: '响应数据',
-          children: [
-            {
-              title: '平均响应时间',
-              dataIndex: 'avg_response_time',
-              key: 'avg_response_time',
-              width: 120,
-              sorter: true,
-              render: (value: number) => <div>{value?.toFixed(1) || '0'}秒</div>
-            },
-            {
-              title: '1分钟响应率',
-              dataIndex: 'rate_1min_response',
-              key: 'rate_1min_response',
-              width: 100,
-              sorter: true,
-              render: (text: string) => <div>{text}</div>
-            },
-            {
-              title: '1小时超时率',
-              dataIndex: 'rate_1hour_timeout',
-              key: 'rate_1hour_timeout',
-              width: 100,
-              sorter: true,
-              render: (text: string) => <div>{text}</div>
-            },
-            {
-              title: '响应时间范围',
-              dataIndex: 'response_time_range',
-              key: 'response_time_range',
-              width: 150,
-              render: (responseTimeRange: any) => {
-                if (!responseTimeRange) return '-'
-                
-                const hasRemark = Boolean(responseTimeRange.remark && responseTimeRange.remark.trim() !== '')
-                const hasDates = Boolean(responseTimeRange.start_date && responseTimeRange.end_date)
-
-                if (hasRemark && hasDates) {
-                  const startDate = new Date(responseTimeRange.start_date).toLocaleDateString()
-                  const endDate = new Date(responseTimeRange.end_date).toLocaleDateString()
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                      <Tooltip title={`${responseTimeRange.remark}\n开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
-                        <Tag color="orange">{responseTimeRange.remark}</Tag>
-                      </Tooltip>
-                      <Tooltip title={`开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
-                        <Tag color="orange">{startDate} ~ {endDate}</Tag>
-                      </Tooltip>
-                    </div>
-                  )
-                }
-
-                if (hasRemark) {
-                  return (
-                    <Tooltip title={`${responseTimeRange.remark}${hasDates ? `\n开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}` : ''}`}>
-                      <Tag color="orange">{responseTimeRange.remark}</Tag>
-                    </Tooltip>
-                  )
-                }
-
-                if (hasDates) {
-                  const startDate = new Date(responseTimeRange.start_date).toLocaleDateString()
-                  const endDate = new Date(responseTimeRange.end_date).toLocaleDateString()
-                  return (
-                    <Tooltip title={`开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
-                      <Tag color="orange">{startDate} ~ {endDate}</Tag>
-                    </Tooltip>
-                  )
-                }
-                
-                return '-'
-              }
-            }
-          ]
+    {
+      title: '响应数据',
+      children: [
+        {
+          title: '平均响应时间',
+          dataIndex: 'avg_response_time',
+          key: 'avg_response_time',
+          width: 120,
+          sorter: (a: any, b: any) => {
+            const aVal = a?.avg_response_time || 0
+            const bVal = b?.avg_response_time || 0
+            return aVal - bVal
+          },
+          render: (value: number) => <div>{value?.toFixed(1) || '0'}秒</div>
         },
+        {
+          title: '1分钟响应率',
+          dataIndex: 'rate_1min_response',
+          key: 'rate_1min_response',
+          width: 100,
+          sorter: (a: any, b: any) => {
+            const aVal = parseFloat(a?.rate_1min_response?.replace('%', '') || '0')
+            const bVal = parseFloat(b?.rate_1min_response?.replace('%', '') || '0')
+            return aVal - bVal
+          },
+          render: (text: string) => <div>{text}</div>
+        },
+        {
+          title: '1小时超时率',
+          dataIndex: 'rate_1hour_timeout',
+          key: 'rate_1hour_timeout',
+          width: 100,
+          sorter: (a: any, b: any) => {
+            const aVal = parseFloat(a?.rate_1hour_timeout?.replace('%', '') || '0')
+            const bVal = parseFloat(b?.rate_1hour_timeout?.replace('%', '') || '0')
+            return aVal - bVal
+          },
+          render: (text: string) => <div>{text}</div>
+        },
+        {
+          title: '响应时间范围',
+          dataIndex: 'response_time_range',
+          key: 'response_time_range',
+          width: 150,
+          render: (responseTimeRange: any) => {
+            if (!responseTimeRange) return '-'
+            
+            const hasRemark = Boolean(responseTimeRange.remark && responseTimeRange.remark.trim() !== '')
+            const hasDates = Boolean(responseTimeRange.start_date && responseTimeRange.end_date)
 
+            if (hasRemark && hasDates) {
+              const startDate = new Date(responseTimeRange.start_date).toLocaleDateString()
+              const endDate = new Date(responseTimeRange.end_date).toLocaleDateString()
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                  <Tooltip title={`${responseTimeRange.remark}\n开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
+                    <Tag color="orange">{responseTimeRange.remark}</Tag>
+                  </Tooltip>
+                  <Tooltip title={`开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
+                    <Tag color="orange">{startDate} ~ {endDate}</Tag>
+                  </Tooltip>
+                </div>
+              )
+            }
+
+            if (hasRemark) {
+              return (
+                <Tooltip title={`${responseTimeRange.remark}${hasDates ? `\n开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}` : ''}`}>
+                  <Tag color="orange">{responseTimeRange.remark}</Tag>
+                </Tooltip>
+              )
+            }
+
+            if (hasDates) {
+              const startDate = new Date(responseTimeRange.start_date).toLocaleDateString()
+              const endDate = new Date(responseTimeRange.end_date).toLocaleDateString()
+              return (
+                <Tooltip title={`开始: ${responseTimeRange.start_date}\n结束: ${responseTimeRange.end_date}`}>
+                  <Tag color="orange">{startDate} ~ {endDate}</Tag>
+                </Tooltip>
+              )
+            }
+            
+            return '-'
+          }
+        }
+      ]
+    },
     {
       title: '操作',
       key: 'actions',
@@ -1519,8 +1655,15 @@ const EmployeeSimpleJoin: React.FC = () => {
         {/* 数据表格 */}
         <Table
           columns={columns as any}
-          dataSource={data}
-          rowKey={(record, index) => record.employee_id || `index_${index}`}
+          dataSource={data || []}
+          rowKey={(record) => {
+            try {
+              return record?.employee_id || `uid_${record?.employee_uid || Math.random()}`
+            } catch (error) {
+              console.warn('生成行键时出错:', error, record)
+              return `error_${Math.random()}`
+            }
+          }}
           loading={loading}
           size="small"
           pagination={false}
@@ -1528,16 +1671,23 @@ const EmployeeSimpleJoin: React.FC = () => {
           scroll={{ x: 2900, y: 600 }}
           sticky={{ offsetHeader: 0 }}
           rowSelection={rowSelection}
+          locale={{
+            emptyText: '暂无数据',
+            triggerDesc: '点击降序',
+            triggerAsc: '点击升序',
+            cancelSort: '取消排序'
+          }}
         />
 
         {/* 分页 */}
         <div style={{ marginTop: 16, textAlign: 'right' }}>
           <Pagination
-            current={pagination.current}
-            pageSize={pagination.pageSize}
-            total={pagination.total}
+            current={pagination?.current || 1}
+            pageSize={pagination?.pageSize || 20}
+            total={pagination?.total || 0}
             showSizeChanger
             showQuickJumper
+            pageSizeOptions={['20', '50', '100']}
             showTotal={(total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`}
             onChange={handlePaginationChange}
             onShowSizeChange={handlePaginationChange}
@@ -1562,7 +1712,7 @@ const EmployeeSimpleJoin: React.FC = () => {
               const sendResp = await fetch(SEND_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-              // key 从服务端环境变量“社区员工号周报wehook”读取
+              // key 从服务端环境变量"社区员工号周报wehook"读取
               body: JSON.stringify({ msgtype: 'markdown', markdown: { content } })
               })
               if (!sendResp.ok) continue
@@ -1584,7 +1734,7 @@ const EmployeeSimpleJoin: React.FC = () => {
         width={800}
       >
         <div style={{ maxHeight: 420, overflow: 'auto' }}>
-          <div style={{ marginBottom: 12, color: '#999' }}>可编辑以下“统计概览”部分；下方链接列表不支持编辑。</div>
+          <div style={{ marginBottom: 12, color: '#999' }}>可编辑以下"统计概览"部分；下方链接列表不支持编辑。</div>
           <Input.TextArea
             value={wecomHeader}
             onChange={(e) => setWecomHeader(e.target.value)}
@@ -2122,7 +2272,7 @@ const EmployeeSimpleJoin: React.FC = () => {
             }
           ]}
           dataSource={selectedEmployeeNotes}
-          rowKey={(record, index) => record.id || `note_index_${index}`}
+          rowKey={(record) => record.id || `note_${record.note_id || Math.random()}`}
           loading={notesLoading}
           size="small"
           pagination={{
@@ -2142,7 +2292,7 @@ const EmployeeSimpleJoin: React.FC = () => {
         footer={null}
         width="90vw"
         style={{ top: 20 }}
-        bodyStyle={{ height: '80vh', padding: 0 }}
+        styles={{ body: { height: '80vh', padding: 0 } }}
       >
         <iframe
           src={selectedNoteLink}
