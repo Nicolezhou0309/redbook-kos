@@ -755,6 +755,16 @@ const EmployeeSimpleJoin: React.FC = () => {
       console.log('📊 分页参数:', { page: validPage, pageSize: validPageSize })
       console.log('📊 当前分页状态:', pagination)
       
+      // 特别记录黄牌筛选条件
+      if (filters.yellow_card_timeout_rate || filters.yellow_card_notes_count || filters.yellow_card_min_private_message_leads || filters.yellow_card_start_date || filters.yellow_card_end_date) {
+        console.log('🟡 黄牌筛选条件详情:')
+        console.log('  - 超时率阈值:', filters.yellow_card_timeout_rate)
+        console.log('  - 笔记数阈值:', filters.yellow_card_notes_count)
+        console.log('  - 私信进线数阈值:', filters.yellow_card_min_private_message_leads)
+        console.log('  - 黄牌开始日期:', filters.yellow_card_start_date)
+        console.log('  - 黄牌结束日期:', filters.yellow_card_end_date)
+      }
+      
       const result = await getEmployeeSimpleJoinData(
         filters,
         sortField,
@@ -995,7 +1005,7 @@ const EmployeeSimpleJoin: React.FC = () => {
     
     const newFilters: SimpleJoinFilterParams = {}
     
-    // 黄牌筛选条件
+    // 黄牌筛选条件 - 修复字段名映射
     if (values.yellow_card_1min_timeout_rate !== undefined) {
       newFilters.yellow_card_timeout_rate = values.yellow_card_1min_timeout_rate
     }
@@ -1015,7 +1025,6 @@ const EmployeeSimpleJoin: React.FC = () => {
       newFilters.start_date = startDate
       newFilters.end_date = endDate
     }
-
 
     // 先更新筛选条件
     setFilters(newFilters)

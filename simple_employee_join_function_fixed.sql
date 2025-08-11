@@ -204,29 +204,85 @@ BEGIN
     where_conditions := array_append(where_conditions, format('erd.user_rating_score <= %s', max_user_rating));
   END IF;
 
-  -- 黄牌筛选逻辑：简化版本，避免复杂的字符串转义
+  -- 黄牌筛选逻辑：实现正确的OR逻辑
+  -- 筛选逻辑：时间范围 AND ((超时率超标 AND 私信进线数达标) OR 笔记数不足)
   IF yellow_card_timeout_rate IS NOT NULL OR yellow_card_notes_count IS NOT NULL OR yellow_card_min_private_message_leads IS NOT NULL THEN
-    -- 私信进线最小值条件（剔除异常数据）
-    IF yellow_card_min_private_message_leads IS NOT NULL THEN
-      where_conditions := array_append(where_conditions, 'eld.total_private_message_leads >= ' || yellow_card_min_private_message_leads);
-    END IF;
+    -- 构建黄牌筛选条件
+    DECLARE
+      yellow_card_condition TEXT := '';
+    BEGIN
+      -- 条件1：超时率超标 AND 私信进线数达标
+      IF yellow_card_timeout_rate IS NOT NULL AND yellow_card_min_private_message_leads IS NOT NULL THEN
+        yellow_card_condition := '(
+          CASE 
+            WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*$'' THEN 
+              erd.rate_1hour_timeout::NUMERIC
+            WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*%$'' THEN 
+              REPLACE(erd.rate_1hour_timeout, ''%'', '''')::NUMERIC
+            ELSE NULL
+          END
+        ) > ' || yellow_card_timeout_rate || ' AND eld.total_private_message_leads >= ' || yellow_card_min_private_message_leads;
+      END IF;
 
-    -- 黄牌条件：超时率大于X OR 笔记发布量小于x
-    IF yellow_card_timeout_rate IS NOT NULL THEN
-      where_conditions := array_append(where_conditions, '(
-        CASE 
-          WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*$'' THEN 
-            erd.rate_1hour_timeout::NUMERIC
-          WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*%$'' THEN 
-            REPLACE(erd.rate_1hour_timeout, ''%'', '''')::NUMERIC
-          ELSE NULL
-        END
-      ) > ' || yellow_card_timeout_rate);
-    END IF;
+      -- 条件2：笔记数不足
+      IF yellow_card_notes_count IS NOT NULL THEN
+        IF yellow_card_condition != '' THEN
+          yellow_card_condition := yellow_card_condition || ' OR eld.published_notes_count < ' || yellow_card_notes_count;
+        ELSE
+          yellow_card_condition := 'eld.published_notes_count < ' || yellow_card_notes_count;
+        END IF;
+      END IF;
 
-    IF yellow_card_notes_count IS NOT NULL THEN
-      where_conditions := array_append(where_conditions, 'eld.published_notes_count < ' || yellow_card_notes_count);
-    END IF;
+      -- 如果只有超时率条件，没有私信进线数条件，则只检查超时率
+      IF yellow_card_timeout_rate IS NOT NULL AND yellow_card_min_private_message_leads IS NULL THEN
+        IF yellow_card_condition != '' THEN
+          yellow_card_condition := yellow_card_condition || ' OR (CASE 
+            WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*$'' THEN 
+              erd.rate_1hour_timeout::NUMERIC
+            WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*%$'' THEN 
+              REPLACE(erd.rate_1hour_timeout, ''%'', '''')::NUMERIC
+            ELSE NULL
+          END) > ' || yellow_card_timeout_rate;
+        ELSE
+          yellow_card_condition := '(CASE 
+            WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*$'' THEN 
+              erd.rate_1hour_timeout::NUMERIC
+            WHEN erd.rate_1hour_timeout ~ ''^[0-9]+\.?[0-9]*%$'' THEN 
+              REPLACE(erd.rate_1hour_timeout, ''%'', '''')::NUMERIC
+            ELSE NULL
+          END) > ' || yellow_card_timeout_rate;
+        END IF;
+      END IF;
+
+      -- 如果只有私信进线数条件，没有超时率条件，则只检查私信进线数
+      IF yellow_card_min_private_message_leads IS NOT NULL AND yellow_card_timeout_rate IS NULL THEN
+        IF yellow_card_condition != '' THEN
+          yellow_card_condition := yellow_card_condition || ' OR eld.total_private_message_leads >= ' || yellow_card_min_private_message_leads;
+        ELSE
+          yellow_card_condition := 'eld.total_private_message_leads >= ' || yellow_card_min_private_message_leads;
+        END IF;
+      END IF;
+
+      -- 添加黄牌筛选条件
+      IF yellow_card_condition != '' THEN
+        where_conditions := array_append(where_conditions, '(' || yellow_card_condition || ')');
+      END IF;
+    END;
+  END IF;
+
+  -- 黄牌时间范围筛选 - 添加对黄牌时间范围的筛选
+  IF yellow_card_start_date IS NOT NULL AND yellow_card_end_date IS NOT NULL THEN
+    where_conditions := array_append(where_conditions, format('(
+      (eld.time_range->>''start_date'')::DATE >= %L::DATE AND (eld.time_range->>''end_date'')::DATE <= %L::DATE
+    )', yellow_card_start_date, yellow_card_end_date));
+  ELSIF yellow_card_start_date IS NOT NULL THEN
+    where_conditions := array_append(where_conditions, format('(
+      (eld.time_range->>''start_date'')::DATE >= %L::DATE
+    )', yellow_card_start_date));
+  ELSIF yellow_card_end_date IS NOT NULL THEN
+    where_conditions := array_append(where_conditions, format('(
+      (eld.time_range->>''end_date'')::DATE <= %L::DATE
+    )', yellow_card_end_date));
   END IF;
 
   -- 组合WHERE条件
