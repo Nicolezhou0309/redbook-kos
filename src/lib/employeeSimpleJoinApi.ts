@@ -58,7 +58,6 @@ export interface SimpleJoinFilterParams {
   filter_xiaohongshu_nickname?: string
   filter_region?: string
   filter_status?: string
-  time_range_remark?: string
   start_date?: string
   end_date?: string
   
@@ -180,7 +179,6 @@ export const getEmployeeSimpleJoinData = async (
       filter_xiaohongshu_nickname,
       filter_region,
       filter_status,
-      time_range_remark,
       start_date,
       end_date,
       min_interactions,
@@ -239,7 +237,6 @@ export const getEmployeeSimpleJoinData = async (
       filter_xiaohongshu_nickname: filter_xiaohongshu_nickname || null,
       filter_region: filter_region || null,
       filter_status: filter_status || null,
-      time_range_remark: time_range_remark || null,
       start_date: start_date || null,
       end_date: end_date || null,
       min_interactions: min_interactions || null,
@@ -377,7 +374,6 @@ export const downloadEmployeeSimpleJoinData = async (
       filter_xiaohongshu_nickname,
       filter_region,
       filter_status,
-      time_range_remark,
       start_date,
       end_date,
       min_interactions,
@@ -437,7 +433,6 @@ export const downloadEmployeeSimpleJoinData = async (
       filter_xiaohongshu_nickname: filter_xiaohongshu_nickname || null,
       filter_region: filter_region || null,
       filter_status: filter_status || null,
-      time_range_remark: time_range_remark || null,
       start_date: start_date || null,
       end_date: end_date || null,
       min_interactions: min_interactions || null,

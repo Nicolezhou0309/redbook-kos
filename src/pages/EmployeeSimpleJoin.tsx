@@ -915,7 +915,6 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 应用黄牌筛选条件
   const handleApplyYellowCardFilter = (values: any) => {
-    const filterStartTime = Date.now()
     
     const newFilters: SimpleJoinFilterParams = {}
     
@@ -932,8 +931,12 @@ const EmployeeSimpleJoin: React.FC = () => {
     if (values.yellow_card_date_range) {
       const startDate = values.yellow_card_date_range[0]?.format('YYYY-MM-DD')
       const endDate = values.yellow_card_date_range[1]?.format('YYYY-MM-DD')
+      // 设置黄牌时间范围参数
       newFilters.yellow_card_start_date = startDate
       newFilters.yellow_card_end_date = endDate
+      // 关键修复：同步到通用时间范围筛选参数，确保筛选逻辑一致
+      newFilters.start_date = startDate
+      newFilters.end_date = endDate
     }
 
 
@@ -1002,9 +1005,6 @@ const EmployeeSimpleJoin: React.FC = () => {
     }
     if (values.filter_status) {
       newFilters.filter_status = values.filter_status
-    }
-    if (values.time_range_remark) {
-      newFilters.time_range_remark = values.time_range_remark
     }
     if (values.date_range) {
       const startDate = values.date_range[0]?.format('YYYY-MM-DD')
@@ -1141,7 +1141,6 @@ const EmployeeSimpleJoin: React.FC = () => {
   // 处理表格变化
   const handleTableChange = (_pagination: any, _filters: any, sorter: any) => {
     if (sorter.field) {
-      const sortStartTime = Date.now()
       const newSortField = sorter.field
       const newSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
 
@@ -1152,7 +1151,6 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 处理分页变化
   const handlePaginationChange = (page: number, pageSize: number) => {
-    const paginationStartTime = Date.now()
 
     try {
       // 验证分页参数
@@ -1175,7 +1173,6 @@ const EmployeeSimpleJoin: React.FC = () => {
 
   // 重置筛选
   const resetFilters = () => {
-    const resetStartTime = Date.now()
     // 清除所有筛选条件，黄牌判断条件独立管理
     setFilters({})
     setSearchQuery('')
