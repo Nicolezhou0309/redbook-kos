@@ -96,7 +96,6 @@ export default async function handler(req, res) {
       filter_xiaohongshu_nickname: filters.filter_xiaohongshu_nickname || null,
       filter_region: filters.filter_region || null,
       filter_status: filters.filter_status || null,
-      time_range_remark: filters.time_range_remark || null,
       start_date: filters.start_date || null,
       end_date: filters.end_date || null,
       min_interactions: filters.min_interactions || null,
