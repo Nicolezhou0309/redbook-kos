@@ -2073,6 +2073,50 @@ const EmployeeSimpleJoin: React.FC = () => {
         width={800}
       >
         <div style={{ maxHeight: 420, overflow: 'auto' }}>
+          {/* 筛选时间范围展示 */}
+          <div style={{ 
+            marginBottom: 16, 
+            padding: '12px 16px', 
+            backgroundColor: '#f5f5f5', 
+            borderRadius: '6px',
+            border: '1px solid #e8e8e8'
+          }}>
+            <div style={{ fontWeight: 500, marginBottom: 8, color: '#333' }}>📅 当前筛选时间范围：</div>
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              {filters.start_date && filters.end_date ? (
+                <>
+                  <span style={{ color: '#1890ff' }}>{filters.start_date}</span>
+                  <span style={{ margin: '0 8px', color: '#999' }}>至</span>
+                  <span style={{ color: '#1890ff' }}>{filters.end_date}</span>
+                </>
+              ) : (
+                <span style={{ color: '#ff4d4f' }}>未设置时间范围（将使用所有数据）</span>
+              )}
+            </div>
+            {/* 黄牌筛选条件展示 */}
+            {(filters.yellow_card_timeout_rate !== undefined || 
+              filters.yellow_card_notes_count !== undefined || 
+              filters.yellow_card_min_private_message_leads !== undefined ||
+              filters.yellow_card_start_date !== undefined ||
+              filters.yellow_card_end_date !== undefined) && (
+              <div style={{ marginTop: 8, fontSize: '13px', color: '#666' }}>
+                <span style={{ color: '#faad14' }}>🟡 黄牌筛选条件：</span>
+                {filters.yellow_card_timeout_rate !== undefined && (
+                  <span style={{ marginLeft: 8 }}>超时率 &gt; {filters.yellow_card_timeout_rate}%</span>
+                )}
+                {filters.yellow_card_notes_count !== undefined && (
+                  <span style={{ marginLeft: 8 }}>笔记数 &lt; {filters.yellow_card_notes_count}</span>
+                )}
+                {filters.yellow_card_min_private_message_leads !== undefined && (
+                  <span style={{ marginLeft: 8 }}>私信进线数 &gt; {filters.yellow_card_min_private_message_leads}</span>
+                )}
+                {filters.yellow_card_start_date && filters.yellow_card_end_date && (
+                  <span style={{ marginLeft: 8 }}>黄牌时间：{filters.yellow_card_start_date} ~ {filters.yellow_card_end_date}</span>
+                )}
+              </div>
+            )}
+          </div>
+          
           <div style={{ marginBottom: 12, color: '#999' }}>可编辑以下"统计概览"部分；下方链接列表不支持编辑。</div>
           <Input.TextArea
             value={wecomHeader}
