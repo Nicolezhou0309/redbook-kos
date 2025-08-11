@@ -157,6 +157,18 @@ const EmployeeSimpleJoin: React.FC = () => {
   const handleTableSelectionChange = (newSelectedRowKeys: React.Key[], newSelectedRows: EmployeeSimpleJoinData[]) => {
     setSelectedRowKeys(newSelectedRowKeys)
     setSelectedRows(newSelectedRows)
+    
+    // 检查选中的员工中是否有无效ID
+    const invalidEmployees = newSelectedRows.filter(employee => 
+      !employee.employee_id || 
+      employee.employee_id.startsWith('temp_') || 
+      employee.employee_id.startsWith('error_')
+    )
+    
+    if (invalidEmployees.length > 0) {
+      console.warn(`选中的员工中有 ${invalidEmployees.length} 个无法匹配到员工数据，将无法发放黄牌:`, 
+        invalidEmployees.map(e => e.employee_name || '未知'))
+    }
   }
 
   // 清除选择
@@ -202,12 +214,50 @@ const EmployeeSimpleJoin: React.FC = () => {
     }
   }
 
+  // 调试函数：检查员工数据完整性
+  const debugEmployeeData = (employee: EmployeeSimpleJoinData) => {
+    console.log('🔍 调试员工数据:', {
+      employee_id: employee.employee_id,
+      employee_name: employee.employee_name,
+      employee_uid: employee.employee_uid,
+      xiaohongshu_nickname: employee.xiaohongshu_nickname,
+      region: employee.region,
+      status: employee.status,
+      time_range: employee.time_range,
+      response_time_range: employee.response_time_range,
+      rate_1hour_timeout: employee.rate_1hour_timeout,
+      total_private_message_leads: employee.total_private_message_leads,
+      published_notes_count: employee.published_notes_count
+    })
+  }
+
+  // 调试函数：检查黄牌条件
+  const debugYellowCardConditions = () => {
+    console.log('🔍 调试黄牌条件:', {
+      yellow_card_timeout_rate: yellowCardConditions.yellow_card_timeout_rate,
+      yellow_card_notes_count: yellowCardConditions.yellow_card_notes_count,
+      yellow_card_min_private_message_leads: yellowCardConditions.yellow_card_min_private_message_leads,
+      yellow_card_start_date: yellowCardConditions.yellow_card_start_date,
+      yellow_card_end_date: yellowCardConditions.yellow_card_end_date
+    })
+  }
+
   // 发放黄牌
   const handleIssueYellowCard = async () => {
     if (selectedRows.length === 0) {
       message.warning('请先选择要发放黄牌的员工')
       return
     }
+
+    // 调试：检查黄牌条件
+    debugYellowCardConditions()
+    
+    // 调试：检查选中的员工数据
+    console.log('🔍 选中的员工数量:', selectedRows.length)
+    selectedRows.forEach((employee, index) => {
+      console.log(`🔍 员工 ${index + 1}:`, employee.employee_name)
+      debugEmployeeData(employee)
+    })
 
     // 检查是否设置了黄牌判断条件
     const hasYellowCardConditions = yellowCardConditions.yellow_card_timeout_rate !== undefined || 
@@ -229,113 +279,116 @@ const EmployeeSimpleJoin: React.FC = () => {
       const currentTime = new Date().toISOString()
       
       // 遍历选中的员工，判断黄牌状态并创建记录
+      let skippedCount = 0
+      let validCount = 0
+      
       for (const employee of selectedRows) {
+        // 检查员工ID是否有效（跳过临时生成的ID）
+        if (!employee.employee_id || employee.employee_id.startsWith('temp_') || employee.employee_id.startsWith('error_')) {
+          console.warn(`跳过无效员工ID的员工: ${employee.employee_name || '未知'}, ID: ${employee.employee_id}`)
+          skippedCount++
+          continue
+        }
+        
+        validCount++
         const yellowCardStatus = getYellowCardStatus(employee)
         
         // 只对满足黄牌条件的员工创建记录
         if (yellowCardStatus.status !== 'normal' && yellowCardStatus.status !== 'not_set') {
-          // 构建来源信息
+          // 构建来源信息，确保所有字段都有有效值
           const sourceMetadata = {
             yellow_card_conditions: yellowCardConditions,
             employee_data: {
               employee_id: employee.employee_id,
-              employee_uid: employee.employee_uid,
-              xiaohongshu_nickname: employee.xiaohongshu_nickname,
-              region: employee.region,
-              status: employee.status,
-              time_range: employee.time_range,
-              response_time_range: employee.response_time_range
+              employee_uid: employee.employee_uid || '',
+              xiaohongshu_nickname: employee.xiaohongshu_nickname || '',
+              region: employee.region || '',
+              status: employee.status || '',
+              time_range: employee.time_range || {},
+              response_time_range: employee.response_time_range || {}
             },
             yellow_card_status: yellowCardStatus,
             trigger_time: currentTime
           }
           
+          // 确保时间范围字段有有效值
+          const sourceTimeRange = {
+            yellow_card_start_date: yellowCardConditions.yellow_card_start_date || null,
+            yellow_card_end_date: yellowCardConditions.yellow_card_end_date || null,
+            employee_time_range: employee.time_range || {},
+            employee_response_time_range: employee.response_time_range || {}
+          }
+          
           if (yellowCardStatus.status === 'both') {
             // 同时满足两个条件，创建两条记录
             const timeoutRecord: DisciplinaryRecordForm = {
-              employee_name: employee.employee_name,
-              reason: `黄牌-回复率超标: ${yellowCardStatus.reason}`,
+              employee_name: employee.employee_name || '未知员工',
+              reason: `黄牌-回复率超标: ${yellowCardStatus.reason || '回复率超标'}`,
               type: '回复率',
               employee_id: employee.employee_id,
               source_type: 'auto',
               source_table: 'employee_simple_join',
               source_record_id: employee.employee_id,
-              source_time_range: {
-                yellow_card_start_date: yellowCardConditions.yellow_card_start_date,
-                yellow_card_end_date: yellowCardConditions.yellow_card_end_date,
-                employee_time_range: employee.time_range,
-                employee_response_time_range: employee.response_time_range
-              },
+              source_time_range: sourceTimeRange,
               source_batch_id: batchId,
               source_file_name: 'employee_simple_join_yellow_card',
               source_import_time: currentTime,
-              source_metadata: sourceMetadata
+              source_metadata: sourceMetadata,
+              is_effective: true
             }
             recordsToCreate.push(timeoutRecord)
             
             const notesRecord: DisciplinaryRecordForm = {
-              employee_name: employee.employee_name,
-              reason: `黄牌-发布量不足: ${yellowCardStatus.reason}`,
+              employee_name: employee.employee_name || '未知员工',
+              reason: `黄牌-发布量不足: ${yellowCardStatus.reason || '发布量不足'}`,
               type: '发布量',
               employee_id: employee.employee_id,
               source_type: 'auto',
               source_table: 'employee_simple_join',
               source_record_id: employee.employee_id,
-              source_time_range: {
-                yellow_card_start_date: yellowCardConditions.yellow_card_start_date,
-                yellow_card_end_date: yellowCardConditions.yellow_card_end_date,
-                employee_time_range: employee.time_range,
-                employee_response_time_range: employee.response_time_range
-              },
+              source_time_range: sourceTimeRange,
               source_batch_id: batchId,
               source_file_name: 'employee_simple_join_yellow_card',
               source_import_time: currentTime,
-              source_metadata: sourceMetadata
+              source_metadata: sourceMetadata,
+              is_effective: true
             }
             recordsToCreate.push(notesRecord)
             
           } else if (yellowCardStatus.status === 'timeout') {
             // 只满足回复率超标条件
             const record: DisciplinaryRecordForm = {
-              employee_name: employee.employee_name,
-              reason: `黄牌-回复率超标: ${yellowCardStatus.reason}`,
+              employee_name: employee.employee_name || '未知员工',
+              reason: `黄牌-回复率超标: ${yellowCardStatus.reason || '回复率超标'}`,
               type: '回复率',
               employee_id: employee.employee_id,
               source_type: 'auto',
               source_table: 'employee_simple_join',
               source_record_id: employee.employee_id,
-              source_time_range: {
-                yellow_card_start_date: yellowCardConditions.yellow_card_start_date,
-                yellow_card_end_date: yellowCardConditions.yellow_card_end_date,
-                employee_time_range: employee.time_range,
-                employee_response_time_range: employee.response_time_range
-              },
+              source_time_range: sourceTimeRange,
               source_batch_id: batchId,
               source_file_name: 'employee_simple_join_yellow_card',
               source_import_time: currentTime,
-              source_metadata: sourceMetadata
+              source_metadata: sourceMetadata,
+              is_effective: true
             }
             recordsToCreate.push(record)
           } else if (yellowCardStatus.status === 'notes') {
             // 只满足发布量不足条件
             const record: DisciplinaryRecordForm = {
-              employee_name: employee.employee_name,
-              reason: `黄牌-发布量不足: ${yellowCardStatus.reason}`,
+              employee_name: employee.employee_name || '未知员工',
+              reason: `黄牌-发布量不足: ${yellowCardStatus.reason || '发布量不足'}`,
               type: '发布量',
               employee_id: employee.employee_id,
               source_type: 'auto',
               source_table: 'employee_simple_join',
               source_record_id: employee.employee_id,
-              source_time_range: {
-                yellow_card_start_date: yellowCardConditions.yellow_card_start_date,
-                yellow_card_end_date: yellowCardConditions.yellow_card_end_date,
-                employee_time_range: employee.time_range,
-                employee_response_time_range: employee.response_time_range
-              },
+              source_time_range: sourceTimeRange,
               source_batch_id: batchId,
               source_file_name: 'employee_simple_join_yellow_card',
               source_import_time: currentTime,
-              source_metadata: sourceMetadata
+              source_metadata: sourceMetadata,
+              is_effective: true
             }
             recordsToCreate.push(record)
           }
@@ -343,19 +396,32 @@ const EmployeeSimpleJoin: React.FC = () => {
       }
 
       if (recordsToCreate.length === 0) {
-        message.info('选中的员工均不满足黄牌条件，无需发放黄牌')
+        if (skippedCount > 0) {
+          message.info(`选中的员工中有 ${skippedCount} 个无法匹配到员工数据，${validCount} 个员工均不满足黄牌条件，无需发放黄牌`)
+        } else {
+          message.info('选中的员工均不满足黄牌条件，无需发放黄牌')
+        }
         return
       }
 
+      // 添加调试日志
+      console.log('准备创建黄牌记录:', recordsToCreate)
+      
       // 批量创建黄牌记录
       const createdRecords = await disciplinaryRecordApi.batchCreateDisciplinaryRecords(recordsToCreate)
       
-      message.success(`成功发放 ${createdRecords.length} 条黄牌记录`)
+      // 显示处理结果
+      let successMessage = `成功发放 ${createdRecords.length} 条黄牌记录`
+      if (skippedCount > 0) {
+        successMessage += `，跳过 ${skippedCount} 个无法匹配的员工`
+      }
+      message.success(successMessage)
       
       // 清除选择
       clearSelection()
       
     } catch (error) {
+      console.error('发放黄牌详细错误:', error)
       message.error('发放黄牌失败，请重试')
     } finally {
       setIssuingYellowCard(false)
@@ -648,6 +714,17 @@ const EmployeeSimpleJoin: React.FC = () => {
   const canIssueYellowCard = () => {
     // 检查是否有选中的记录
     if (selectedRows.length === 0) {
+      return false
+    }
+    
+    // 检查选中的员工是否都有有效的ID
+    const validEmployees = selectedRows.filter(employee => 
+      employee.employee_id && 
+      !employee.employee_id.startsWith('temp_') && 
+      !employee.employee_id.startsWith('error_')
+    )
+    
+    if (validEmployees.length === 0) {
       return false
     }
     

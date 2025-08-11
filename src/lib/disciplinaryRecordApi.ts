@@ -315,20 +315,51 @@ export const disciplinaryRecordApi = {
   // 批量创建违规记录
   async batchCreateDisciplinaryRecords(records: DisciplinaryRecordForm[]): Promise<DisciplinaryRecord[]> {
     try {
-      const recordsWithEffective = records.map(record => ({ ...record, is_effective: record.is_effective ?? true }));
-      const { data, error } = await supabase
-        .from('disciplinary_record')
-        .insert(recordsWithEffective)
-        .select();
-
-      if (error) {
-        throw error;
+      if (!records || records.length === 0) {
+        throw new Error('没有要创建的记录')
       }
 
-      return data || [];
+      // 验证每条记录的必填字段
+      const validatedRecords = records.map((record, index) => {
+        if (!record.employee_name || !record.reason) {
+          throw new Error(`记录 ${index + 1} 缺少必填字段: employee_name 或 reason`)
+        }
+        
+        // 确保所有字段都有有效值，避免 undefined 或 null
+        return {
+          ...record,
+          employee_name: record.employee_name || '',
+          reason: record.reason || '',
+          type: record.type || '',
+          employee_id: record.employee_id || '',
+          source_type: record.source_type || 'auto',
+          source_table: record.source_table || '',
+          source_record_id: record.source_record_id || '',
+          source_time_range: record.source_time_range || {},
+          source_batch_id: record.source_batch_id || '',
+          source_file_name: record.source_file_name || '',
+          source_import_time: record.source_import_time || new Date().toISOString(),
+          source_metadata: record.source_metadata || {},
+          is_effective: record.is_effective ?? true
+        }
+      })
+
+      console.log('验证后的记录:', validatedRecords)
+
+      const { data, error } = await supabase
+        .from('disciplinary_record')
+        .insert(validatedRecords)
+        .select()
+
+      if (error) {
+        console.error('Supabase 插入错误:', error)
+        throw error
+      }
+
+      return data || []
     } catch (error) {
-      console.error('批量创建违规记录失败:', error);
-      throw error;
+      console.error('批量创建违规记录失败:', error)
+      throw error
     }
   },
 
