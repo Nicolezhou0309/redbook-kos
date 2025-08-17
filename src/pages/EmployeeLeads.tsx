@@ -93,7 +93,7 @@ export default function EmployeeLeads() {
   const [selectedRemark, setSelectedRemark] = useState<string>('');
   const [parsedData, setParsedData] = useState<EmployeeLeadsDataForm[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [duplicates, setDuplicates] = useState<string[]>([]);
+
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -283,35 +283,12 @@ export default function EmployeeLeads() {
       const data = await parseFileData(file);
       if (!data) return;
 
-      const duplicatesList: string[] = [];
+      // 直接使用所有解析的数据，不进行查重
+      setParsedData(data);
 
-      // 检查数据是否重复（备注为空时不进行查重）
-      for (const item of data) {
-        const remark = selectedRemark || '';
-        const exists = remark ? await employeeLeadsApi.checkEmployeeLeadsDataExists(item.account_id, remark) : false;
-        if (exists) {
-          duplicatesList.push(item.employee_name);
-        }
-      }
-
-      // 过滤掉重复数据
-      const newData = data.filter(item => {
-        const remark = selectedRemark || '';
-        const exists = remark ? duplicatesList.includes(item.employee_name) : false;
-        return !exists;
-      });
-
-      if (newData.length === 0) {
-        message.warning('没有新的数据需要导入');
-        return;
-      }
-
-      // 保存解析的数据和重复数据
-      setParsedData(newData);
-      setDuplicates(duplicatesList);
       setUploadedFile(file);
       
-      message.success(`文件解析完成，共 ${newData.length} 条新数据，${duplicatesList.length} 条重复数据`);
+      message.success(`文件解析完成，共 ${data.length} 条数据`);
       
     } catch (error) {
       message.error(`文件解析失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -329,13 +306,9 @@ export default function EmployeeLeads() {
       await employeeLeadsApi.batchCreateEmployeeLeadsData(parsedData);
       
       message.success(`成功导入 ${parsedData.length} 条数据`);
-      if (duplicates.length > 0) {
-        message.warning(`跳过 ${duplicates.length} 条重复数据: ${duplicates.join(', ')}`);
-      }
       
       setImportModalVisible(false);
       setParsedData([]);
-      setDuplicates([]);
       setUploadedFile(null);
       setSelectedDateRange(null);
       setSelectedRemark('');
@@ -946,7 +919,6 @@ export default function EmployeeLeads() {
                 setSelectedDateRange(null);
                 setSelectedRemark('');
                 setParsedData([]);
-                setDuplicates([]);
                 setUploadedFile(null);
               }}
               footer={[
@@ -957,7 +929,6 @@ export default function EmployeeLeads() {
                     setSelectedDateRange(null);
                     setSelectedRemark('');
                     setParsedData([]);
-                    setDuplicates([]);
                     setUploadedFile(null);
                   }}
                 >
@@ -1042,12 +1013,7 @@ export default function EmployeeLeads() {
                       fontSize: '14px'
                     }}>
                       <div>📁 已上传文件: {uploadedFile.name}</div>
-                      <div>✅ 新数据: {parsedData.length} 条</div>
-                      {duplicates.length > 0 && (
-                        <div style={{ color: '#faad14' }}>
-                          ⚠️ 重复数据: {duplicates.length} 条 ({duplicates.join(', ')})
-                        </div>
-                      )}
+                      <div>✅ 数据: {parsedData.length} 条</div>
                     </div>
                   </Form.Item>
                 )}

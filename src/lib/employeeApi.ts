@@ -123,7 +123,7 @@ export const employeeApi = {
       const { data, error } = await supabase
         .from('employee_response_data')
         .select('*')
-        .eq('time_range->remark', timeRange)
+        .eq('time_range->>remark', timeRange)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -267,7 +267,7 @@ export const employeeApi = {
       const { data, error } = await supabase
         .from('employee_response_data')
         .select('time_range')
-        .order('time_range->remark', { ascending: false });
+        .order('time_range->>remark', { ascending: false });
 
       if (error) {
         console.warn('数据库连接失败，使用模拟数据:', error.message);
@@ -315,7 +315,7 @@ export const employeeApi = {
         .from('employee_response_data')
         .select('id')
         .eq('employee_uid', employeeUid)
-        .eq('time_range->remark', timeRange)
+        .eq('time_range->>remark', timeRange)
         .limit(1);
 
       if (error) {
@@ -338,7 +338,7 @@ export const employeeApi = {
         .select('*');
 
       if (timeRange) {
-        query = query.eq('time_range->remark', timeRange);
+        query = query.eq('time_range->>remark', timeRange);
       }
 
       const { data, error } = await query;

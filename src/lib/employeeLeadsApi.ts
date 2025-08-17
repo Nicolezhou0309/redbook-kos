@@ -139,7 +139,7 @@ export const employeeLeadsApi = {
       const { data, error } = await supabase
         .from('employee_leads_data')
         .select('*')
-        .eq('time_range->remark', timeRange)
+        .eq('time_range->>remark', timeRange)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -284,6 +284,7 @@ export const employeeLeadsApi = {
   // 批量创建员工线索数据
   async batchCreateEmployeeLeadsData(dataList: EmployeeLeadsDataForm[]): Promise<EmployeeLeadsData[]> {
     try {
+      // 直接插入所有数据，不进行查重检查
       const { data, error } = await supabase
         .from('employee_leads_data')
         .insert(dataList)
@@ -296,36 +297,42 @@ export const employeeLeadsApi = {
       return data || [];
     } catch (error) {
       console.warn('数据库操作失败:', error);
-      // 返回模拟数据
-      const mockResults: EmployeeLeadsData[] = dataList.map((item, index) => ({
-        id: (Date.now() + index).toString(),
-        ...item,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-      return mockResults;
+      throw error;
     }
   },
 
   // 检查员工线索数据是否存在（用于查重）
   async checkEmployeeLeadsDataExists(accountId: string, timeRange: string): Promise<boolean> {
     try {
+      // 参数验证
+      if (!accountId || !timeRange) {
+        console.warn('查重参数无效:', { accountId, timeRange });
+        return false;
+      }
+
       const { data, error } = await supabase
         .from('employee_leads_data')
         .select('id')
         .eq('account_id', accountId)
-        .eq('time_range->remark', timeRange)
+        .eq('time_range->>remark', timeRange)
         .limit(1);
 
       if (error) {
         console.warn('数据库连接失败:', error.message);
-        return false;
+        // 如果数据库连接失败，为了安全起见，假设数据已存在
+        return true;
       }
 
-      return (data && data.length > 0);
+      const exists = (data && data.length > 0);
+      if (exists) {
+        console.log(`发现重复数据: account_id=${accountId}, time_range.remark=${timeRange}`);
+      }
+      
+      return exists;
     } catch (error) {
       console.warn('数据库连接异常:', error);
-      return false;
+      // 如果出现异常，为了安全起见，假设数据已存在
+      return true;
     }
   },
 
@@ -337,7 +344,7 @@ export const employeeLeadsApi = {
         .select('*');
 
       if (timeRange) {
-        query = query.eq('time_range->remark', timeRange);
+        query = query.eq('time_range->>remark', timeRange);
       }
 
       const { data, error } = await query;
