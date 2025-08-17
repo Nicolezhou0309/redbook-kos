@@ -67,17 +67,16 @@ export function calculateViolationStatus(
       const newYellowCards = weekViolations.length;
       yellowCards += newYellowCards;
       
-      // 检查是否升级为红牌（2张黄牌=1张红牌）
-      if (yellowCards >= 2) {
-        const newRedCards = Math.floor(yellowCards / 2);
-        redCards += newRedCards;
-        yellowCards = yellowCards % 2;
+      // 检查是否升级为红牌（3张黄牌=1张红牌）
+      if (yellowCards >= 3) {
+        const newRedCards = Math.floor(yellowCards / 3);
+        const remainingYellowCards = yellowCards % 3;
         
         statusHistory.push({
           week,
           changeType: 'escalation',
           cardType: 'red',
-          reason: `累计${yellowCards + redCards * 2}张黄牌，升级为${newRedCards}张红牌`,
+          reason: `累计${remainingYellowCards + redCards * 3}张黄牌，升级为${newRedCards}张红牌`,
           timestamp: dayjs().format('YYYY-MM-DD HH:mm:ss')
         });
       }

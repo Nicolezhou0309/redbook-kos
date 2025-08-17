@@ -1,4 +1,4 @@
--- 修正红牌规则：2张黄牌=1张红牌
+-- 修正红牌规则：3张黄牌=1张红牌
 
 -- 1. 修正违规状态计算函数
 CREATE OR REPLACE FUNCTION calculate_employee_violation_status(p_employee_id uuid)
@@ -9,35 +9,85 @@ DECLARE
     v_current_status text := 'normal';
     v_week_violations integer;
     v_week_record record;
+    v_activation_time timestamp with time zone;
+    v_activation_week text;
+    v_violation_week text;
 BEGIN
-    -- 按周统计违规记录
-    FOR v_week_record IN 
-        SELECT 
-            to_char(created_at, 'YYYY-WW') as week,
-            count(*) as violations_count
-        FROM public.disciplinary_record 
-        WHERE employee_id = p_employee_id
-        GROUP BY to_char(created_at, 'YYYY-WW')
-        ORDER BY week
-    LOOP
-        v_week_violations := v_week_record.violations_count;
-        
-        IF v_week_violations > 0 THEN
-            -- 本周有违规，获得黄牌
-            v_yellow_cards := v_yellow_cards + v_week_violations;
+    -- 获取员工的开通时间
+    SELECT activation_time INTO v_activation_time
+    FROM public.employee_list 
+    WHERE id = p_employee_id;
+    
+    -- 如果没有开通时间，则按原规则计算
+    IF v_activation_time IS NULL THEN
+        -- 按周统计违规记录
+        FOR v_week_record IN 
+            SELECT 
+                to_char(created_at, 'YYYY-WW') as week,
+                count(*) as violations_count
+            FROM public.disciplinary_record 
+            WHERE employee_id = p_employee_id
+            GROUP BY to_char(created_at, 'YYYY-WW')
+            ORDER BY week
+        LOOP
+            v_week_violations := v_week_record.violations_count;
             
-            -- 检查是否升级为红牌（2张黄牌=1张红牌）
-            IF v_yellow_cards >= 2 THEN
-                v_red_cards := v_red_cards + floor(v_yellow_cards / 2);
-                v_yellow_cards := v_yellow_cards % 2;
+            IF v_week_violations > 0 THEN
+                -- 本周有违规，获得黄牌
+                v_yellow_cards := v_yellow_cards + v_week_violations;
+                
+                -- 检查是否升级为红牌（3张黄牌=1张红牌）
+                IF v_yellow_cards >= 3 THEN
+                    v_red_cards := v_red_cards + floor(v_yellow_cards / 3);
+                    v_yellow_cards := v_yellow_cards % 3;
+                END IF;
+            ELSE
+                -- 本周无违规，检查是否可以恢复黄牌
+                IF v_yellow_cards > 0 AND v_red_cards = 0 THEN
+                    v_yellow_cards := greatest(0, v_yellow_cards - 1);
+                END IF;
             END IF;
-        ELSE
-            -- 本周无违规，检查是否可以恢复黄牌
-            IF v_yellow_cards > 0 AND v_red_cards = 0 THEN
-                v_yellow_cards := greatest(0, v_yellow_cards - 1);
+        END LOOP;
+    ELSE
+        -- 计算开通时间所在周
+        v_activation_week := to_char(v_activation_time, 'YYYY-WW');
+        
+        -- 按周统计违规记录，但只计算开通时间次周及之后的记录
+        FOR v_week_record IN 
+            SELECT 
+                to_char(created_at, 'YYYY-WW') as week,
+                count(*) as violations_count
+            FROM public.disciplinary_record 
+            WHERE employee_id = p_employee_id
+            GROUP BY to_char(created_at, 'YYYY-WW')
+            ORDER BY week
+        LOOP
+            v_violation_week := v_week_record.week;
+            
+            -- 只处理开通时间次周及之后的违规记录
+            -- 开通时间次周 = 开通时间所在周 + 1周
+            IF v_violation_week > v_activation_week THEN
+                v_week_violations := v_week_record.violations_count;
+                
+                IF v_week_violations > 0 THEN
+                    -- 本周有违规，获得黄牌
+                    v_yellow_cards := v_yellow_cards + v_week_violations;
+                    
+                    -- 检查是否升级为红牌（3张黄牌=1张红牌）
+                    IF v_yellow_cards >= 3 THEN
+                        v_red_cards := v_red_cards + floor(v_yellow_cards / 3);
+                        v_yellow_cards := v_yellow_cards % 3;
+                    END IF;
+                ELSE
+                    -- 本周无违规，检查是否可以恢复黄牌
+                    IF v_yellow_cards > 0 AND v_red_cards = 0 THEN
+                        v_yellow_cards := greatest(0, v_yellow_cards - 1);
+                    END IF;
+                END IF;
             END IF;
-        END IF;
-    END LOOP;
+            -- 如果是开通时间当周或之前，跳过不计算
+        END LOOP;
+    END IF;
     
     -- 确定当前状态
     IF v_red_cards > 0 THEN
@@ -53,7 +103,13 @@ BEGIN
         'employeeId', p_employee_id,
         'currentYellowCards', v_yellow_cards,
         'currentRedCards', v_red_cards,
-        'status', v_current_status
+        'status', v_current_status,
+        'activationTime', v_activation_time,
+        'activationWeek', v_activation_week,
+        'ruleApplied', CASE 
+            WHEN v_activation_time IS NULL THEN 'standard_rule'
+            ELSE 'activation_time_delayed_rule'
+        END
     );
 END;
 $$ LANGUAGE plpgsql;

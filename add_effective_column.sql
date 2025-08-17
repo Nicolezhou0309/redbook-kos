@@ -39,10 +39,10 @@ BEGIN
             -- 本周有违规，获得黄牌
             v_yellow_cards := v_yellow_cards + v_week_violations;
             
-            -- 检查是否升级为红牌（2张黄牌=1张红牌）
-            IF v_yellow_cards >= 2 THEN
-                v_red_cards := v_red_cards + floor(v_yellow_cards / 2);
-                v_yellow_cards := v_yellow_cards % 2;
+            -- 检查是否升级为红牌（3张黄牌=1张红牌）
+            IF v_yellow_cards >= 3 THEN
+                v_red_cards := v_red_cards + floor(v_yellow_cards / 3);
+                v_yellow_cards := v_yellow_cards % 3;
             END IF;
         ELSE
             -- 本周无违规，检查是否可以恢复黄牌

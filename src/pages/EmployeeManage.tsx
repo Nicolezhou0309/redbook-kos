@@ -1339,7 +1339,7 @@ export default function EmployeeManage() {
               <Card size="small" title="状态说明">
                 <div style={{ padding: '16px', color: '#666' }}>
                   <p><strong>黄牌规则：</strong>每次违规获得1张黄牌，每周无违规可恢复1张黄牌</p>
-                  <p><strong>红牌规则：</strong>2张黄牌升级为1张红牌，红牌不会自动恢复</p>
+                  <p><strong>红牌规则：</strong>3张黄牌升级为1张红牌，红牌不会自动恢复</p>
                   <p><strong>状态优先级：</strong>红牌 {'>'} 黄牌 {'>'} 正常</p>
                   <p><strong>注意：</strong>违规状态由数据库自动计算，添加违规记录时会自动更新</p>
                 </div>
