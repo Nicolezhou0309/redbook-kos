@@ -83,10 +83,30 @@ export class EmployeeRosterApi {
   }
 
   async batchUpsert(records: EmployeeRosterForm[]): Promise<EmployeeRoster[]> {
-    // 依赖 employee_uid 唯一约束
+    // 过滤记录，只写入非空字段
+    const cleanRecords = records.map(rec => {
+      const cleaned: any = {
+        employee_name: rec.employee_name || '',
+      }
+      if (rec.employee_uid !== undefined && rec.employee_uid !== null) cleaned.employee_uid = rec.employee_uid
+      if (rec.area) cleaned.area = rec.area
+      if (rec.community) cleaned.community = rec.community
+      if (rec.department) cleaned.department = rec.department
+      if (rec.position) cleaned.position = rec.position
+      if (rec.manager) cleaned.manager = rec.manager
+      if (rec.phone) cleaned.phone = rec.phone
+      if (rec.email) cleaned.email = rec.email
+      if (rec.hire_date) cleaned.hire_date = rec.hire_date
+      if (rec.hire_period) cleaned.hire_period = rec.hire_period
+      if (rec.status) cleaned.status = rec.status
+      if (rec.remark) cleaned.remark = rec.remark
+      if (rec.source_file_name) cleaned.source_file_name = rec.source_file_name
+      return cleaned
+    })
+
     const { data, error } = await supabase
       .from('employee_roster')
-      .upsert(records, { onConflict: 'employee_uid' })
+      .upsert(cleanRecords, { onConflict: 'employee_uid' })
       .select()
 
     if (error) throw new Error(`批量写入失败: ${error.message}`)

@@ -150,8 +150,11 @@ export default function EmployeeRosterPage() {
     if (iName < 0) throw new Error('缺少必填列：姓名')
 
     const iUid = idx('员工UID') >= 0 ? idx('员工UID') : idx('UID')
+    const iArea = idx('片区')
+    const iCommunity = idx('社区')
     const iDept = idx('部门')
     const iPos = idx('岗位') >= 0 ? idx('岗位') : idx('职务')
+    const iManager = idx('直线经理') >= 0 ? idx('直线经理') : idx('经理')
     const iPhone = idx('电话') >= 0 ? idx('电话') : idx('手机号')
     const iEmail = idx('邮箱')
     const iHire = idx('入职日期')
@@ -165,8 +168,11 @@ export default function EmployeeRosterPage() {
       const rec: EmployeeRosterForm = {
         employee_name: String(row[iName] ?? '').trim(),
         employee_uid: iUid >= 0 && row[iUid] != null ? String(row[iUid]).trim() : null,
+        area: iArea >= 0 ? (row[iArea] ? String(row[iArea]).trim() : null) : null,
+        community: iCommunity >= 0 ? (row[iCommunity] ? String(row[iCommunity]).trim() : null) : null,
         department: iDept >= 0 ? (row[iDept] ? String(row[iDept]).trim() : null) : null,
         position: iPos >= 0 ? (row[iPos] ? String(row[iPos]).trim() : null) : null,
+        manager: iManager >= 0 ? (row[iManager] ? String(row[iManager]).trim() : null) : null,
         phone: iPhone >= 0 ? (row[iPhone] ? String(row[iPhone]).trim() : null) : null,
         email: iEmail >= 0 ? (row[iEmail] ? String(row[iEmail]).trim() : null) : null,
         hire_date: iHire >= 0 && row[iHire] ? dayjs(row[iHire]).isValid() ? dayjs(row[iHire]).format('YYYY-MM-DD') : null : null,
